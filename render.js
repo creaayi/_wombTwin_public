@@ -191,6 +191,7 @@
   function renderPlaybackBar() {
     return `
     <div class="playback-bar" id="playbackBar">
+      <button class="playback-close" id="btnClose" title="Close player">&times;</button>
       <div class="playback-inner">
         <div class="playback-controls">
           <button class="pb-btn" id="btnPrev" title="Previous beat">&#9664;&#9664;</button>
