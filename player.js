@@ -1,63 +1,73 @@
 // ============================================================
-// wombTwin Project Hub — Playback Engine
+// wombTwin Project Hub — Playback Engine (bilingual-aware)
 // ============================================================
 // Reads PROJECT from data.js, finds <audio> elements built by
 // render.js, and wires up unified continuous playback.
+// Re-initializes on 'hub-rerender' event (language switch).
 // ============================================================
 
 (function() {
   const D = PROJECT;
-
-  // === Build playlist from data ===
-  // For each beat, find the track marked usedInArc (or first track, or null)
-  const playlist = D.beats.map((beat, i) => {
-    const arcTrack = beat.tracks.find(t => t.usedInArc) || null;
-    return {
-      beat: beat.name,
-      color: beat.color,
-      beatId: 'beat-' + i,
-      startAt: arcTrack ? arcTrack.startAt : 0,
-      trackName: arcTrack ? arcTrack.title : 'No track yet',
-      audioMatch: arcTrack ? arcTrack.file : null,
-      missing: !arcTrack,
-    };
-  });
-
-  // === DOM refs ===
-  const bar        = document.getElementById('playbackBar');
-  const btnPlay    = document.getElementById('btnPlay');
-  const btnPrev    = document.getElementById('btnPrev');
-  const btnNext    = document.getElementById('btnNext');
-  const trackEl    = document.getElementById('playbackTrack');
-  const elBeatName = document.getElementById('playbackBeatName');
-  const elTrackName= document.getElementById('playbackTrackName');
-  const elTime     = document.getElementById('playbackTime');
-  const launchBtn  = document.getElementById('launchPlayback');
 
   let currentIdx = -1;
   let playing = false;
   let raf = null;
   let segments = [];
   let managedPlay = false;
+  let playlist = [];
+  let allPageAudios = [];
 
-  // === Resolve DOM audio elements ===
-  const allPageAudios = Array.from(document.querySelectorAll('audio.music-player'));
+  // DOM refs (refreshed on init)
+  let bar, btnPlay, btnPrev, btnNext, trackEl, elBeatName, elTrackName, elTime, launchBtn, btnClose;
 
-  playlist.forEach(item => {
-    item.audioEl = null;
-    item.beatEl = document.getElementById(item.beatId);
-    item.musicCard = null;
-    if (item.audioMatch) {
-      const found = allPageAudios.find(a => {
-        const src = a.querySelector('source');
-        return src && src.getAttribute('src') === item.audioMatch;
-      });
-      if (found) {
-        item.audioEl = found;
-        item.musicCard = found.closest('.music-card');
+  // === Build playlist from data ===
+  function buildPlaylist() {
+    playlist = D.beats.map((beat, i) => {
+      const arcTrack = beat.tracks.find(t => t.usedInArc) || null;
+      const name = beat.name;
+      return {
+        beat: (typeof name === 'object') ? (name[window.hubLang] || name.en) : name,
+        color: beat.color,
+        beatId: 'beat-' + i,
+        startAt: arcTrack ? arcTrack.startAt : 0,
+        trackName: arcTrack ? arcTrack.title : '',
+        audioMatch: arcTrack ? arcTrack.file : null,
+        missing: !arcTrack,
+      };
+    });
+  }
+
+  // === Resolve DOM refs ===
+  function resolveDOM() {
+    bar        = document.getElementById('playbackBar');
+    btnPlay    = document.getElementById('btnPlay');
+    btnPrev    = document.getElementById('btnPrev');
+    btnNext    = document.getElementById('btnNext');
+    trackEl    = document.getElementById('playbackTrack');
+    elBeatName = document.getElementById('playbackBeatName');
+    elTrackName= document.getElementById('playbackTrackName');
+    elTime     = document.getElementById('playbackTime');
+    launchBtn  = document.getElementById('launchPlayback');
+    btnClose   = document.getElementById('btnClose');
+
+    allPageAudios = Array.from(document.querySelectorAll('audio.music-player'));
+
+    playlist.forEach(item => {
+      item.audioEl = null;
+      item.beatEl = document.getElementById(item.beatId);
+      item.musicCard = null;
+      if (item.audioMatch) {
+        const found = allPageAudios.find(a => {
+          const src = a.querySelector('source');
+          return src && src.getAttribute('src') === item.audioMatch;
+        });
+        if (found) {
+          item.audioEl = found;
+          item.musicCard = found.closest('.music-card');
+        }
       }
-    }
-  });
+    });
+  }
 
   // === Helpers ===
   function fmt(s) {
@@ -91,7 +101,7 @@
       const item = playlist[idx];
       if (item.beatEl) {
         item.beatEl.classList.add('now-playing');
-        const barH = bar.offsetHeight || 80;
+        const barH = bar ? bar.offsetHeight || 80 : 80;
         const rect = item.beatEl.getBoundingClientRect();
         const top = window.scrollY + rect.top - barH - 20;
         window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
@@ -104,6 +114,7 @@
 
   // === Build segments ===
   function buildSegments() {
+    if (!trackEl) return;
     trackEl.innerHTML = '';
     segments = [];
     playlist.forEach((item, i) => {
@@ -169,7 +180,7 @@
 
     if (currentIdx >= 0 && currentIdx < playlist.length) {
       const item = playlist[currentIdx];
-      elBeatName.textContent = 'Beat ' + (currentIdx + 1) + ' — ' + item.beat;
+      elBeatName.textContent = item.beat;
       elBeatName.style.color = item.color;
       elTrackName.textContent = item.trackName;
       if (item.audioEl && !isNaN(item.audioEl.duration)) {
@@ -177,8 +188,8 @@
       }
     }
 
-    btnPrev.disabled = findNextPlayable(currentIdx, -1) === -1;
-    btnNext.disabled = findNextPlayable(currentIdx, 1) === -1;
+    if (btnPrev) btnPrev.disabled = findNextPlayable(currentIdx, -1) === -1;
+    if (btnNext) btnNext.disabled = findNextPlayable(currentIdx, 1) === -1;
 
     if (playing) raf = requestAnimationFrame(updateUI);
   }
@@ -191,8 +202,7 @@
     });
     if (raf) cancelAnimationFrame(raf);
     playing = false;
-    btnPlay.classList.remove('playing');
-    btnPlay.innerHTML = '&#9654;';
+    if (btnPlay) { btnPlay.classList.remove('playing'); btnPlay.innerHTML = '&#9654;'; }
     clearBeatHighlights();
   }
 
@@ -205,12 +215,11 @@
     }
     if (idx < 0 || idx >= playlist.length) {
       currentIdx = playlist.length;
-      elBeatName.textContent = 'End of arc';
-      elBeatName.style.color = '';
-      elTrackName.textContent = '';
-      elTime.textContent = '';
+      if (elBeatName) { elBeatName.textContent = 'End'; elBeatName.style.color = ''; }
+      if (elTrackName) elTrackName.textContent = '';
+      if (elTime) elTime.textContent = '';
       segments.forEach(s => { s.classList.remove('active'); if (s.classList.contains('has-track')) s.classList.add('done'); });
-      btnPlay.innerHTML = '&#8634;';
+      if (btnPlay) btnPlay.innerHTML = '&#8634;';
       clearBeatHighlights();
       return;
     }
@@ -227,8 +236,7 @@
       audioEl.play();
       managedPlay = false;
       playing = true;
-      btnPlay.classList.add('playing');
-      btnPlay.innerHTML = '&#10074;&#10074;';
+      if (btnPlay) { btnPlay.classList.add('playing'); btnPlay.innerHTML = '&#10074;&#10074;'; }
       highlightBeat(idx);
       updateUI();
     };
@@ -268,15 +276,13 @@
       item.audioEl.pause();
       playing = false;
       if (raf) cancelAnimationFrame(raf);
-      btnPlay.classList.remove('playing');
-      btnPlay.innerHTML = '&#9654;';
+      if (btnPlay) { btnPlay.classList.remove('playing'); btnPlay.innerHTML = '&#9654;'; }
     } else {
       managedPlay = true;
       item.audioEl.play();
       managedPlay = false;
       playing = true;
-      btnPlay.classList.add('playing');
-      btnPlay.innerHTML = '&#10074;&#10074;';
+      if (btnPlay) { btnPlay.classList.add('playing'); btnPlay.innerHTML = '&#10074;&#10074;'; }
       highlightBeat(currentIdx);
       updateUI();
     }
@@ -292,74 +298,97 @@
     if (next !== -1) playIndex(next);
   }
 
-  // === Intercept individual audio play events ===
-  allPageAudios.forEach(audioEl => {
-    audioEl.addEventListener('play', () => {
-      if (managedPlay) return;
-      const idx = playlist.findIndex(item => item.audioEl === audioEl);
-      if (idx === -1) return;
-      allPageAudios.forEach(a => { if (a !== audioEl && !a.paused) a.pause(); });
-      if (!bar.classList.contains('visible')) {
-        bar.classList.add('visible');
-        document.body.classList.add('playback-active');
-        if (launchBtn) launchBtn.style.display = 'none';
-      }
-      if (raf) cancelAnimationFrame(raf);
-      playlist.forEach(item => {
-        if (item.audioEl) item.audioEl.removeEventListener('ended', onEnded);
-      });
-      currentIdx = idx;
-      audioEl.addEventListener('ended', onEnded);
-      playing = true;
-      btnPlay.classList.add('playing');
-      btnPlay.innerHTML = '&#10074;&#10074;';
-      highlightBeat(idx);
-      updateUI();
-    });
-
-    audioEl.addEventListener('pause', () => {
-      if (managedPlay) return;
-      const idx = playlist.findIndex(item => item.audioEl === audioEl);
-      if (idx === currentIdx && playing) {
-        playing = false;
-        if (raf) cancelAnimationFrame(raf);
-        btnPlay.classList.remove('playing');
-        btnPlay.innerHTML = '&#9654;';
-      }
-    });
-  });
-
-  // === Keyboard shortcuts ===
-  document.addEventListener('keydown', (e) => {
-    if (!bar.classList.contains('visible')) return;
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-    if (e.code === 'ArrowRight') { e.preventDefault(); goNext(); }
-    if (e.code === 'ArrowLeft')  { e.preventDefault(); goPrev(); }
-  });
-
-  // === Close bar ===
   function closeBar() {
     stopAudio();
-    bar.classList.remove('visible');
+    if (bar) bar.classList.remove('visible');
     document.body.classList.remove('playback-active');
     clearBeatHighlights();
     currentIdx = -1;
     if (launchBtn) launchBtn.style.display = '';
   }
 
-  // === Init ===
-  buildSegments();
+  // === Wire up events ===
+  function wireEvents() {
+    if (btnPlay) btnPlay.addEventListener('click', togglePlay);
+    if (btnPrev) btnPrev.addEventListener('click', goPrev);
+    if (btnNext) btnNext.addEventListener('click', goNext);
+    if (btnClose) btnClose.addEventListener('click', closeBar);
 
-  btnPlay.addEventListener('click', togglePlay);
-  btnPrev.addEventListener('click', goPrev);
-  btnNext.addEventListener('click', goNext);
-  document.getElementById('btnClose').addEventListener('click', closeBar);
+    if (launchBtn) {
+      launchBtn.addEventListener('click', () => {
+        if (bar) bar.classList.add('visible');
+        document.body.classList.add('playback-active');
+        launchBtn.style.display = 'none';
+        playIndex(0);
+      });
+    }
 
-  launchBtn.addEventListener('click', () => {
-    bar.classList.add('visible');
-    document.body.classList.add('playback-active');
-    launchBtn.style.display = 'none';
-    playIndex(0);
+    // Intercept individual audio play events
+    allPageAudios.forEach(audioEl => {
+      audioEl.addEventListener('play', () => {
+        if (managedPlay) return;
+        const idx = playlist.findIndex(item => item.audioEl === audioEl);
+        if (idx === -1) return;
+        allPageAudios.forEach(a => { if (a !== audioEl && !a.paused) a.pause(); });
+        if (bar && !bar.classList.contains('visible')) {
+          bar.classList.add('visible');
+          document.body.classList.add('playback-active');
+          if (launchBtn) launchBtn.style.display = 'none';
+        }
+        if (raf) cancelAnimationFrame(raf);
+        playlist.forEach(item => {
+          if (item.audioEl) item.audioEl.removeEventListener('ended', onEnded);
+        });
+        currentIdx = idx;
+        audioEl.addEventListener('ended', onEnded);
+        playing = true;
+        if (btnPlay) { btnPlay.classList.add('playing'); btnPlay.innerHTML = '&#10074;&#10074;'; }
+        highlightBeat(idx);
+        updateUI();
+      });
+
+      audioEl.addEventListener('pause', () => {
+        if (managedPlay) return;
+        const idx = playlist.findIndex(item => item.audioEl === audioEl);
+        if (idx === currentIdx && playing) {
+          playing = false;
+          if (raf) cancelAnimationFrame(raf);
+          if (btnPlay) { btnPlay.classList.remove('playing'); btnPlay.innerHTML = '&#9654;'; }
+        }
+      });
+    });
+  }
+
+  // === Keyboard shortcuts ===
+  document.addEventListener('keydown', (e) => {
+    if (!bar || !bar.classList.contains('visible')) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    if (e.code === 'ArrowRight') { e.preventDefault(); goNext(); }
+    if (e.code === 'ArrowLeft')  { e.preventDefault(); goPrev(); }
+  });
+
+  // === Initialize ===
+  function init() {
+    // Stop any current playback before re-init
+    if (playing) stopAudio();
+
+    buildPlaylist();
+    resolveDOM();
+    buildSegments();
+    wireEvents();
+
+    // Restore bar visibility if it was open
+    if (bar && document.body.classList.contains('playback-active')) {
+      bar.classList.add('visible');
+      if (launchBtn) launchBtn.style.display = 'none';
+    }
+  }
+
+  init();
+
+  // Re-init when renderer rebuilds the DOM (language switch)
+  document.addEventListener('hub-rerender', () => {
+    init();
   });
 })();
