@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: #060810; overflow: hidden; font-family: 'Courier New', monospace; }
+canvas { display: block; position: absolute; top:0; left:0; }
+
+#ui { position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none; }
+
+#top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 24px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: linear-gradient(to bottom, rgba(6,8,16,0.9) 0%, transparent 100%);
+}
+
+#title {
+  font-size: 10px;
+  letter-spacing: 0.35em;
+  color: rgba(255,255,255,0.22);
+  text-transform: uppercase;
+  line-height: 1.8;
+}
+
+#state-label {
+  text-align: right;
+  line-height: 1.6;
+}
+#state-name {
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  color: rgba(180,210,200,0.45);
+  text-transform: uppercase;
+  transition: color 1.2s;
+}
+#state-desc {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.15);
+  font-style: italic;
+  max-width: 260px;
+  text-align: right;
+  line-height: 1.6;
+  transition: color 1.2s;
+}
+
+#bottom {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 22px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  background: linear-gradient(to top, rgba(6,8,16,0.9) 0%, transparent 100%);
+  pointer-events: all;
+}
+
+.ctrl-row { display: flex; gap: 28px; align-items: flex-end; }
+.ctrl { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ctrl-label {
+  font-size: 8px; letter-spacing: 0.22em;
+  color: rgba(255,255,255,0.15); text-transform: uppercase;
+}
+input[type=range] {
+  -webkit-appearance: none;
+  width: 80px; height: 1px;
+  background: rgba(255,255,255,0.1);
+  outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,0.35); cursor: pointer;
+}
+
+#note {
+  font-size: 8px; letter-spacing: 0.18em;
+  color: rgba(255,255,255,0.08); text-transform: uppercase;
+  text-align: right; line-height: 1.9;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div id="top">
+    <div id="title">wombTwin<br>visual concept — 2</div>
+    <div id="state-label">
+      <div id="state-name">amniotic space</div>
+      <div id="state-desc">the original environment — not a memory</div>
+    </div>
+  </div>
+  <div id="bottom">
+    <div class="ctrl-row">
+      <div class="ctrl">
+        <input type="range" id="presence" min="0" max="100" value="20">
+        <div class="ctrl-label">presence</div>
+      </div>
+      <div class="ctrl">
+        <input type="range" id="surface" min="0" max="100" value="45">
+        <div class="ctrl-label">surface</div>
+      </div>
+      <div class="ctrl">
+        <input type="range" id="pulse-ctrl" min="5" max="95" value="30">
+        <div class="ctrl-label">pulse</div>
+      </div>
+    </div>
+    <div id="note">
+      fluid constrains grid<br>
+      grid reveals fluid
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+let presence = 0.20; // 0=pure fluid, 1=reunion/presence of twin
+let surfaceLevel = 0.45; // grid density / visibility
+let pulseSpeed = 0.30;
+let t = 0;
+
+document.getElementById('presence').addEventListener('input', e => {
+  presence = e.target.value / 100;
+  updateLabel();
+});
+document.getElementById('surface').addEventListener('input', e => {
+  surfaceLevel = e.target.value / 100;
+});
+document.getElementById('pulse-ctrl').addEventListener('input', e => {
+  pulseSpeed = e.target.value / 100;
+});
+
+const STATES = [
+  { threshold: 0.12, name: 'amniotic space', desc: 'the original environment — not a memory', color: 'rgba(140,210,190,0.5)' },
+  { threshold: 0.30, name: 'euphoric reunion', desc: 'for a few seconds, they were together again', color: 'rgba(180,215,160,0.55)' },
+  { threshold: 0.50, name: 'revelation', desc: 'the body knows — recognition before thought', color: 'rgba(140,170,215,0.5)' },
+  { threshold: 0.70, name: 'interference', desc: 'a life lived at a distance from itself', color: 'rgba(200,200,210,0.3)' },
+  { threshold: 0.88, name: 'grief', desc: 'losing her a second time', color: 'rgba(200,130,130,0.5)' },
+  { threshold: 1.01, name: 'reorientation', desc: 'lighter — starting the healing path', color: 'rgba(200,185,145,0.5)' },
+];
+
+let lastState = null;
+function updateLabel() {
+  const s = STATES.find(s => presence < s.threshold) || STATES[STATES.length - 1];
+  if (s !== lastState) {
+    lastState = s;
+    document.getElementById('state-name').textContent = s.name;
+    document.getElementById('state-name').style.color = s.color;
+    document.getElementById('state-desc').textContent = s.desc;
+  }
+}
+updateLabel();
+
+// Metaballs for fluid
+class Blob {
+  constructor(i, total) {
+    this.i = i;
+    this.total = total;
+    this.r = 60 + Math.random() * 120;
+    // orbit params
+    this.cx = W * 0.5;
+    this.cy = H * 0.5;
+    this.orbitR = 40 + Math.random() * Math.min(W, H) * 0.28;
+    this.orbitSpeed = (0.15 + Math.random() * 0.25) * (Math.random() > 0.5 ? 1 : -1);
+    this.orbitPhase = (i / total) * Math.PI * 2 + Math.random();
+    this.yOffset = (Math.random() - 0.5) * H * 0.3;
+    this.color = this.genColor();
+    this.pulsePhase = Math.random() * Math.PI * 2;
+  }
+  genColor() {
+    // Amniotic palette — deep teal, muted jade, near-white blue
+    const palettes = [
+      [60, 120, 130],
+      [80, 150, 140],
+      [90, 130, 160],
+      [70, 110, 120],
+      [100, 160, 150],
+    ];
+    return palettes[this.i % palettes.length];
+  }
+  pos(t, presence) {
+    const speed = this.orbitSpeed * (0.4 + pulseSpeed * 1.2);
+    const angle = this.orbitPhase + t * speed;
+    const orbitR = this.orbitR * (0.5 + presence * 1.2);
+    return {
+      x: W * 0.5 + Math.cos(angle) * orbitR + Math.sin(t * 0.3 + this.pulsePhase) * 20,
+      y: H * 0.5 + Math.sin(angle) * orbitR * 0.6 + this.yOffset * (1 - presence * 0.5) + Math.cos(t * 0.4 + this.pulsePhase) * 15,
+    };
+  }
+  radius(t, presence) {
+    const pulse = 1 + 0.12 * Math.sin(t * (0.8 + pulseSpeed) + this.pulsePhase);
+    const presenceFactor = presence < 0.5 ? 1 + presence * 0.4 : 1.2 + (presence - 0.5) * 0.6;
+    return this.r * pulse * presenceFactor;
+  }
+}
+
+const NUM_BLOBS = 7;
+const blobs = Array.from({ length: NUM_BLOBS }, (_, i) => new Blob(i, NUM_BLOBS));
+
+// Grid cells
+const GRID_COLS = 28;
+const GRID_ROWS = 18;
+
+function fluidAt(x, y, t, presence) {
+  // Sum of metaball fields
+  let sum = 0;
+  for (const b of blobs) {
+    const p = b.pos(t, presence);
+    const r = b.radius(t, presence);
+    const dx = x - p.x;
+    const dy = y - p.y;
+    const d2 = dx * dx + dy * dy;
+    sum += (r * r) / (d2 + 1);
+  }
+  return sum;
+}
+
+// Offscreen for metaballs
+let offscreen, offCtx;
+function makeOffscreen() {
+  offscreen = document.createElement('canvas');
+  offscreen.width = Math.floor(W / 4);
+  offscreen.height = Math.floor(H / 4);
+  offCtx = offscreen.getContext('2d');
+}
+makeOffscreen();
+window.addEventListener('resize', makeOffscreen);
+
+function draw() {
+  ctx.fillStyle = '#060810';
+  ctx.fillRect(0, 0, W, H);
+
+  const sw = offscreen.width;
+  const sh = offscreen.height;
+  const scaleX = W / sw;
+  const scaleY = H / sh;
+
+  // Fluid field on offscreen
+  const imgData = offCtx.createImageData(sw, sh);
+  const THRESHOLD = 80;
+
+  for (let py = 0; py < sh; py++) {
+    for (let px = 0; px < sw; px++) {
+      const x = px * scaleX;
+      const y = py * scaleY;
+      const f = fluidAt(x, y, t, presence);
+
+      let r = 6, g = 8, b2 = 16; // bg color
+      let a = 255;
+
+      if (f > THRESHOLD) {
+        // Inside fluid
+        const excess = Math.min((f - THRESHOLD) / 120, 1);
+        const depth = Math.min((f - THRESHOLD) / 300, 1);
+
+        if (presence < 0.35) {
+          // Teal-green amniotic
+          r = Math.round(20 + excess * 55 + depth * 20);
+          g = Math.round(45 + excess * 90 + depth * 30);
+          b2 = Math.round(55 + excess * 80 + depth * 20);
+        } else if (presence < 0.60) {
+          // Blue-green revelation
+          r = Math.round(20 + excess * 45);
+          g = Math.round(55 + excess * 80);
+          b2 = Math.round(80 + excess * 90);
+        } else {
+          // Grief — muted rose-violet
+          r = Math.round(50 + excess * 90);
+          g = Math.round(25 + excess * 45);
+          b2 = Math.round(55 + excess * 70);
+        }
+      } else if (f > THRESHOLD * 0.6) {
+        // Edge glow
+        const edgeFactor = (f - THRESHOLD * 0.6) / (THRESHOLD * 0.4);
+        if (presence < 0.35) {
+          r = Math.round(6 + edgeFactor * 30);
+          g = Math.round(8 + edgeFactor * 60);
+          b2 = Math.round(16 + edgeFactor * 70);
+        } else if (presence < 0.60) {
+          r = Math.round(6 + edgeFactor * 20);
+          g = Math.round(8 + edgeFactor * 50);
+          b2 = Math.round(16 + edgeFactor * 90);
+        } else {
+          r = Math.round(6 + edgeFactor * 60);
+          g = Math.round(8 + edgeFactor * 20);
+          b2 = Math.round(16 + edgeFactor * 55);
+        }
+      }
+
+      const idx = (py * sw + px) * 4;
+      imgData.data[idx] = r;
+      imgData.data[idx + 1] = g;
+      imgData.data[idx + 2] = b2;
+      imgData.data[idx + 3] = a;
+    }
+  }
+
+  offCtx.putImageData(imgData, 0, 0);
+
+  // Upscale to main canvas with smoothing
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(offscreen, 0, 0, W, H);
+
+  // GRID overlay
+  const cellW = W / GRID_COLS;
+  const cellH = H / GRID_ROWS;
+  const gridAlpha = 0.04 + surfaceLevel * 0.22;
+
+  for (let row = 0; row <= GRID_ROWS; row++) {
+    const y = row * cellH;
+    // Distort grid lines using fluid field
+    ctx.beginPath();
+    for (let px = 0; px <= W; px += 4) {
+      const f = fluidAt(px, y, t, presence);
+      const distort = Math.min((f / THRESHOLD - 0.5), 1) * 8 * surfaceLevel;
+      const py2 = y + distort;
+      if (px === 0) ctx.moveTo(px, py2);
+      else ctx.lineTo(px, py2);
+    }
+    const lineAlpha = gridAlpha * (0.5 + 0.5 * Math.sin(row / GRID_ROWS * Math.PI));
+    ctx.strokeStyle = `rgba(180,220,210,${lineAlpha})`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+
+  for (let col = 0; col <= GRID_COLS; col++) {
+    const x = col * cellW;
+    ctx.beginPath();
+    for (let py = 0; py <= H; py += 4) {
+      const f = fluidAt(x, py, t, presence);
+      const distort = Math.min((f / THRESHOLD - 0.5), 1) * 8 * surfaceLevel;
+      const px2 = x + distort;
+      if (py === 0) ctx.moveTo(px2, py);
+      else ctx.lineTo(px2, py);
+    }
+    const lineAlpha = gridAlpha * (0.5 + 0.5 * Math.sin(col / GRID_COLS * Math.PI));
+    ctx.strokeStyle = `rgba(180,220,210,${lineAlpha})`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+
+  // Grid nodes — light up where fluid is strong
+  for (let row = 0; row <= GRID_ROWS; row++) {
+    for (let col = 0; col <= GRID_COLS; col++) {
+      const x = col * cellW;
+      const y = row * cellH;
+      const f = fluidAt(x, y, t, presence);
+      if (f > THRESHOLD * 0.55) {
+        const strength = Math.min((f - THRESHOLD * 0.55) / (THRESHOLD * 1.5), 1);
+        const nodeAlpha = strength * surfaceLevel * 0.6;
+        let nr, ng, nb;
+        if (presence < 0.35) { nr = 100; ng = 200; nb = 180; }
+        else if (presence < 0.60) { nr = 100; ng = 160; nb = 220; }
+        else { nr = 200; ng = 110; nb = 150; }
+        ctx.beginPath();
+        ctx.arc(x, y, 1.5 + strength * 2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${nr},${ng},${nb},${nodeAlpha})`;
+        ctx.fill();
+      }
+    }
+  }
+
+  // Surface shimmer — fine detail layer
+  if (surfaceLevel > 0.2) {
+    for (let i = 0; i < 3; i++) {
+      const blob = blobs[i];
+      const p = blob.pos(t, presence);
+      const r = blob.radius(t, presence) * 0.4;
+      const shimmerGrad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      const sa = (surfaceLevel - 0.2) * 0.08;
+      shimmerGrad.addColorStop(0, `rgba(255,255,255,${sa})`);
+      shimmerGrad.addColorStop(0.4, `rgba(200,230,220,${sa * 0.4})`);
+      shimmerGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = shimmerGrad;
+      ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+    }
+  }
+
+  t += 0.006 + pulseSpeed * 0.016;
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>

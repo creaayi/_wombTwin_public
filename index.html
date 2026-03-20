@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>wombTwin — Project Hub</title>
+<!-- THEME: swap this file to change the visual design -->
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+
+<!-- Playback bar mounts here (sticky top) -->
+<div id="playback-bar-mount"></div>
+
+<!-- Main content mounts here -->
+<div id="hub-mount" class="hub"></div>
+
+<!-- Load order: data → render (builds HTML) → player (wires audio) -->
+<script src="data.js"></script>
+<script src="render.js"></script>
+<script src="player.js"></script>
+
+</body>
+</html>

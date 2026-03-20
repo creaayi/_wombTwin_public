@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#08080d; overflow:hidden; font-family:'Courier New',monospace; user-select:none; }
+canvas { display:block; cursor:crosshair; }
+
+#hud {
+  position:absolute; top:0; left:0; right:0; bottom:0;
+  pointer-events:none;
+}
+
+#top {
+  position:absolute; top:20px; left:0; right:0;
+  display:flex; justify-content:space-between; align-items:flex-start;
+  padding:0 28px;
+}
+#title { font-size:10px; letter-spacing:0.3em; color:rgba(255,255,255,0.2); text-transform:uppercase; }
+#beat-info { text-align:right; }
+#beat-name { font-size:10px; letter-spacing:0.25em; color:rgba(255,255,255,0.3); text-transform:uppercase; transition:color 0.5s; }
+#beat-sub  { font-size:8px; letter-spacing:0.1em; color:rgba(255,255,255,0.14); font-style:italic; margin-top:3px; max-width:260px; line-height:1.5; }
+
+#toolbar {
+  position:absolute; bottom:22px; left:50%; transform:translateX(-50%);
+  display:flex; gap:2px; align-items:center;
+  pointer-events:all;
+}
+.tool-btn {
+  width:28px; height:28px;
+  border:1px solid rgba(255,255,255,0.1);
+  background:rgba(8,8,13,0.9);
+  color:rgba(255,255,255,0.3);
+  font-size:12px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:all 0.2s;
+}
+.tool-btn:hover, .tool-btn.active {
+  border-color:rgba(255,255,255,0.3);
+  color:rgba(255,255,255,0.8);
+  background:rgba(255,255,255,0.06);
+}
+.tool-sep { width:1px; height:20px; background:rgba(255,255,255,0.08); margin:0 6px; }
+
+#hint {
+  position:absolute; bottom:22px; right:28px;
+  font-size:8px; letter-spacing:0.15em; color:rgba(255,255,255,0.1);
+  text-transform:uppercase; line-height:1.8; text-align:right;
+}
+
+/* Color picker popup */
+#colorpicker {
+  position:absolute; display:none;
+  background:rgba(12,12,18,0.97);
+  border:1px solid rgba(255,255,255,0.1);
+  padding:12px; gap:6px;
+  flex-wrap:wrap; width:120px;
+  pointer-events:all;
+}
+#colorpicker.show { display:flex; }
+.cpick-swatch {
+  width:20px; height:20px; cursor:pointer;
+  border:1px solid rgba(255,255,255,0.0);
+  transition:transform 0.15s, border-color 0.15s;
+}
+.cpick-swatch:hover { transform:scale(1.2); border-color:rgba(255,255,255,0.4); }
+
+/* Intensity popup */
+#intensity-popup {
+  position:absolute; display:none;
+  background:rgba(12,12,18,0.97);
+  border:1px solid rgba(255,255,255,0.1);
+  padding:10px 14px; pointer-events:all;
+  flex-direction:column; gap:5px;
+}
+#intensity-popup.show { display:flex; }
+#intensity-popup label { font-size:8px; letter-spacing:0.2em; color:rgba(255,255,255,0.3); text-transform:uppercase; }
+#intensity-slider {
+  -webkit-appearance:none; width:100px; height:1px;
+  background:rgba(255,255,255,0.15); outline:none; cursor:pointer;
+}
+#intensity-slider::-webkit-slider-thumb {
+  -webkit-appearance:none; width:7px; height:7px;
+  border-radius:50%; background:rgba(255,255,255,0.5); cursor:pointer;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="top">
+    <div id="title">wombTwin — score</div>
+    <div id="beat-info">
+      <div id="beat-name">—</div>
+      <div id="beat-sub"></div>
+    </div>
+  </div>
+
+  <div id="toolbar">
+    <button class="tool-btn active" id="tool-select" title="Select / Move (V)">↖</button>
+    <button class="tool-btn" id="tool-draw" title="Draw note (D)">✦</button>
+    <button class="tool-btn" id="tool-erase" title="Erase (E)">✕</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" id="btn-play" title="Play/Pause (Space)">▶</button>
+    <button class="tool-btn" id="btn-rewind" title="Rewind">↩</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" id="btn-slower" title="Slower">−</button>
+    <button class="tool-btn" id="btn-faster" title="Faster">+</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" id="btn-zoomin" title="Zoom in">⊕</button>
+    <button class="tool-btn" id="btn-zoomout" title="Zoom out">⊖</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" id="btn-addtrack" title="Add track">≡+</button>
+  </div>
+
+  <div id="hint">
+    drag note — move<br>
+    drag edge — resize<br>
+    right-click — color / intensity<br>
+    double-click — rename
+  </div>
+</div>
+
+<div id="colorpicker"></div>
+<div id="intensity-popup">
+  <label>intensity</label>
+  <input type="range" id="intensity-slider" min="5" max="100" value="70">
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  computeLayout();
+}
+
+// ── Layout ──────────────────────────────────────────
+let SL, SR, ST, SB, SW, SH; // score rect
+function computeLayout() {
+  SL = W * 0.10;
+  SR = W * 0.96;
+  ST = H * 0.10;
+  SB = H * 0.88;
+  SW = SR - SL;
+  SH = SB - ST;
+}
+
+// ── State ────────────────────────────────────────────
+const PALETTE = [
+  [180,140,110],[110,150,190],[140,190,150],
+  [190,110,110],[160,155,175],[200,185,140],
+  [150,170,200],[190,160,120],[130,180,160],
+  [210,140,140],[140,160,200],[170,195,140],
+  [200,155,155],[155,200,175],[175,155,200],
+];
+
+let tracks = [
+  { name:'body',     color:[180,140,110], notes:[] },
+  { name:'memory',   color:[110,150,190], notes:[] },
+  { name:'twin',     color:[140,190,150], notes:[] },
+  { name:'grief',    color:[190,110,110], notes:[] },
+  { name:'silence',  color:[160,155,175], notes:[] },
+  { name:'light',    color:[200,185,140], notes:[] },
+];
+
+// Populate default notes (0..1 normalized time)
+const DEFAULT_NOTES = [
+  // body
+  [0,[0.02,0.06,0.3],[0.10,0.04,0.25],[0.18,0.05,0.35],[0.28,0.08,0.5,'the body knows'],[0.38,0.12,0.9,'recognition'],[0.52,0.18,0.7],[0.72,0.06,0.45],[0.82,0.10,0.6],[0.93,0.05,0.35]],
+  // memory
+  [1,[0.05,0.03,0.2],[0.14,0.05,0.3],[0.24,0.03,0.2],[0.35,0.15,0.85,'revelation 1'],[0.55,0.08,0.6],[0.66,0.20,0.95,'revelation 2'],[0.88,0.08,0.5]],
+  // twin
+  [2,[0.08,0.02,0.15],[0.20,0.02,0.15],[0.38,0.05,0.5],[0.44,0.14,1.0,'euphoric reunion'],[0.60,0.12,0.7,'amniotic choreography'],[0.74,0.04,0.3],[0.85,0.03,0.25],[0.94,0.04,0.35]],
+  // grief
+  [3,[0.00,0.08,0.2],[0.12,0.06,0.25],[0.22,0.05,0.3],[0.32,0.04,0.4],[0.56,0.22,0.95,'grief — second loss'],[0.80,0.08,0.5],[0.90,0.05,0.3]],
+  // silence
+  [4,[0.03,0.07,0.5],[0.16,0.06,0.4],[0.26,0.08,0.55],[0.42,0.03,0.3],[0.50,0.04,0.45],[0.64,0.02,0.3],[0.78,0.12,0.7,'reorientation'],[0.92,0.06,0.55]],
+  // light
+  [5,[0.01,0.03,0.2],[0.09,0.02,0.18],[0.44,0.16,0.8,'euphoria inside grief'],[0.78,0.18,0.85,'lighter — healing path'],[0.97,0.03,0.6]],
+];
+DEFAULT_NOTES.forEach(([ti,...notes]) => {
+  notes.forEach(n => {
+    tracks[ti].notes.push({ start:n[0], dur:n[1], intensity:n[2], label:n[3]||null, id:Math.random() });
+  });
+});
+
+const BEAT_REGIONS = [
+  { start:0.00, end:0.28, name:'before',           desc:'a life lived at a slight distance from itself' },
+  { start:0.28, end:0.44, name:'revelation',        desc:'the body knows first — he had a twin' },
+  { start:0.44, end:0.56, name:'euphoric reunion',  desc:'for a few seconds, they are together again' },
+  { start:0.56, end:0.78, name:'grief',             desc:'losing her a second time — and understanding he always had' },
+  { start:0.78, end:1.00, name:'reorientation',     desc:'the same life — not the same person' },
+];
+const BEAT_COLORS = {
+  'before':'rgba(200,200,200,0.28)','revelation':'rgba(140,170,210,0.52)',
+  'euphoric reunion':'rgba(140,190,150,0.58)','grief':'rgba(190,110,110,0.52)',
+  'reorientation':'rgba(200,185,140,0.52)'
+};
+
+let playing = false;
+let playPos  = 0;
+let tempo    = 0.045;
+let zoom     = 1.0;   // 1 = full view, >1 = zoomed in
+let scrollX  = 0;     // offset in score-space
+let lastTs   = null;
+
+// Interaction
+let activeTool = 'select'; // select | draw | erase
+let drag = null; // { type:'move'|'resize-left'|'resize-right'|'playhead', trackIdx, noteId, startX, startPos, startDur, origStart }
+let hoveredNote = null;
+let contextTarget = null; // { trackIdx, noteId } for popups
+
+// ── Helpers ──────────────────────────────────────────
+function visibleRange() { return 1 / zoom; }
+
+function scoreXtoPos(sx) {
+  return scrollX + ((sx - SL) / SW) * visibleRange();
+}
+function posToScreenX(pos) {
+  return SL + ((pos - scrollX) / visibleRange()) * SW;
+}
+function trackIdxFromY(sy) {
+  const th = SH / tracks.length;
+  const idx = Math.floor((sy - ST) / th);
+  return idx >= 0 && idx < tracks.length ? idx : -1;
+}
+function noteScreenRect(trackIdx, note) {
+  const th = SH / tracks.length;
+  const yTop = ST + trackIdx * th + th * 0.1;
+  const noteH = th * 0.8;
+  const x0 = posToScreenX(note.start);
+  const x1 = posToScreenX(note.start + note.dur);
+  return { x: x0, y: yTop, w: x1 - x0, h: noteH };
+}
+function findNote(mx, my) {
+  for (let ti = tracks.length - 1; ti >= 0; ti--) {
+    for (const note of tracks[ti].notes) {
+      const r = noteScreenRect(ti, note);
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        return { trackIdx:ti, note };
+      }
+    }
+  }
+  return null;
+}
+function findNoteById(trackIdx, id) {
+  return tracks[trackIdx].notes.find(n => n.id === id);
+}
+
+// Edge detection: within 6px of left or right edge
+function edgeHit(mx, r) {
+  if (Math.abs(mx - r.x) < 7) return 'resize-left';
+  if (Math.abs(mx - (r.x + r.w)) < 7) return 'resize-right';
+  return 'move';
+}
+
+// ── Cursor ───────────────────────────────────────────
+function updateCursor(mx, my) {
+  if (activeTool === 'erase') { canvas.style.cursor = 'not-allowed'; return; }
+  if (activeTool === 'draw')  { canvas.style.cursor = 'crosshair'; return; }
+  // select tool
+  const hit = findNote(mx, my);
+  if (!hit) { canvas.style.cursor = 'default'; return; }
+  const r = noteScreenRect(hit.trackIdx, hit.note);
+  const edge = edgeHit(mx, r);
+  if (edge === 'resize-left' || edge === 'resize-right') canvas.style.cursor = 'ew-resize';
+  else canvas.style.cursor = 'grab';
+}
+
+// ── Playhead region label ─────────────────────────────
+let lastRegion = null;
+function updateBeatLabel(pos) {
+  const r = BEAT_REGIONS.find(r => pos >= r.start && pos < r.end) || BEAT_REGIONS[BEAT_REGIONS.length-1];
+  if (r === lastRegion) return;
+  lastRegion = r;
+  document.getElementById('beat-name').textContent = r.name;
+  document.getElementById('beat-name').style.color = BEAT_COLORS[r.name]?.replace(/[\d.]+\)$/,'0.6)') || 'rgba(255,255,255,0.3)';
+  document.getElementById('beat-sub').textContent = r.desc;
+}
+
+// ── Draw ─────────────────────────────────────────────
+function draw(ts) {
+  if (lastTs === null) lastTs = ts;
+  const dt = (ts - lastTs) / 1000;
+  lastTs = ts;
+
+  if (playing) {
+    playPos += dt * tempo;
+    if (playPos > 1) playPos = 0;
+    const vr = visibleRange();
+    if (playPos > scrollX + vr * 0.72) scrollX = playPos - vr * 0.72;
+    if (playPos < scrollX + vr * 0.08) scrollX = playPos - vr * 0.08;
+    scrollX = Math.max(0, Math.min(1 - vr, scrollX));
+  }
+
+  updateBeatLabel(playPos);
+
+  ctx.fillStyle = '#08080d';
+  ctx.fillRect(0, 0, W, H);
+
+  const numT = tracks.length;
+  const th = SH / numT;
+  const vr = visibleRange();
+
+  // Beat region tints
+  for (const r of BEAT_REGIONS) {
+    const x0 = posToScreenX(r.start);
+    const x1 = posToScreenX(r.end);
+    const cx0 = Math.max(SL, x0), cx1 = Math.min(SR, x1);
+    if (cx1 <= cx0) continue;
+    const col = BEAT_COLORS[r.name] || 'rgba(255,255,255,0.02)';
+    ctx.fillStyle = col.replace(/[\d.]+\)$/,'0.06)');
+    ctx.fillRect(cx0, ST, cx1-cx0, SH);
+    if (x0 > SL-80 && x0 < SR) {
+      ctx.fillStyle = col.replace(/[\d.]+\)$/,'0.18)');
+      ctx.font = '8px Courier New';
+      ctx.fillText(r.name.toUpperCase(), Math.max(cx0+4,SL+2), ST-6);
+    }
+  }
+
+  // Grid lines
+  const divs = Math.max(4, Math.floor(6 * zoom));
+  for (let i = 0; i <= divs; i++) {
+    const pos = scrollX + (i/divs) * vr;
+    const px = posToScreenX(pos);
+    ctx.beginPath(); ctx.moveTo(px, ST); ctx.lineTo(px, SB);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1; ctx.stroke();
+    if (i % 2 === 0 && px > SL && px < SR) {
+      ctx.fillStyle = 'rgba(255,255,255,0.09)';
+      ctx.font = '7px Courier New';
+      ctx.fillText(Math.round(pos*100)+'%', px-8, ST-5);
+    }
+  }
+  for (let i = 0; i <= numT; i++) {
+    const y = ST + i*th;
+    ctx.beginPath(); ctx.moveTo(SL,y); ctx.lineTo(SR,y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth=1; ctx.stroke();
+  }
+
+  // Track labels
+  ctx.textAlign = 'right';
+  tracks.forEach((t,ti) => {
+    const y = ST + ti*th + th*0.5;
+    ctx.fillStyle = `rgba(${t.color[0]},${t.color[1]},${t.color[2]},0.3)`;
+    ctx.font = '8px Courier New';
+    ctx.fillText(t.name.toUpperCase(), SL-8, y+3);
+    // Color swatch
+    ctx.fillStyle = `rgba(${t.color[0]},${t.color[1]},${t.color[2]},0.5)`;
+    ctx.fillRect(SL-24, y-5, 10, 10);
+  });
+  ctx.textAlign = 'left';
+
+  // Notes
+  tracks.forEach((t,ti) => {
+    const [r,g,b] = t.color;
+    t.notes.forEach(note => {
+      const rect = noteScreenRect(ti, note);
+      if (rect.x + rect.w < SL || rect.x > SR) return;
+      const cx0 = Math.max(SL, rect.x);
+      const cx1 = Math.min(SR, rect.x+rect.w);
+      const nw = cx1-cx0; if (nw < 0.5) return;
+
+      const isActive = playPos >= note.start && playPos < (note.start+note.dur);
+      const isHovered = hoveredNote && hoveredNote.note.id === note.id;
+      const alpha = note.intensity * (isActive ? 0.95 : isHovered ? 0.7 : 0.5);
+
+      // glow
+      if (isActive || isHovered) {
+        ctx.shadowColor = `rgb(${r},${g},${b})`;
+        ctx.shadowBlur = isActive ? 14 : 7;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+
+      // body gradient
+      const grad = ctx.createLinearGradient(cx0, rect.y, cx0, rect.y+rect.h);
+      grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+      grad.addColorStop(1, `rgba(${r},${g},${b},${alpha*0.55})`);
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.roundRect(cx0, rect.y, nw, rect.h, 2); ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // border
+      ctx.strokeStyle = `rgba(${r},${g},${b},${isActive||isHovered ? alpha*1.1 : alpha*0.4})`;
+      ctx.lineWidth = isActive ? 1 : 0.5;
+      ctx.beginPath(); ctx.roundRect(cx0, rect.y, nw, rect.h, 2); ctx.stroke();
+
+      // resize handles (on hover)
+      if (isHovered && nw > 12) {
+        ctx.fillStyle = `rgba(${r},${g},${b},0.6)`;
+        ctx.fillRect(cx0, rect.y, 3, rect.h);
+        ctx.fillRect(cx1-3, rect.y, 3, rect.h);
+      }
+
+      // label
+      if (note.label && nw > 36) {
+        ctx.fillStyle = `rgba(${r},${g},${b},${isActive ? 0.95 : 0.45})`;
+        ctx.font = `${isActive?'italic ':' '}8px Courier New`;
+        ctx.fillText(note.label, cx0+5, rect.y+rect.h*0.65);
+      }
+    });
+  });
+
+  // Playhead
+  const phX = posToScreenX(playPos);
+  if (phX >= SL && phX <= SR) {
+    const grd = ctx.createLinearGradient(phX-10,0,phX+10,0);
+    grd.addColorStop(0,'transparent');
+    grd.addColorStop(0.5,'rgba(255,255,255,0.14)');
+    grd.addColorStop(1,'transparent');
+    ctx.fillStyle = grd; ctx.fillRect(phX-10,ST,20,SH);
+    ctx.beginPath(); ctx.moveTo(phX,ST-6); ctx.lineTo(phX,SB+4);
+    ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(phX,ST-9); ctx.lineTo(phX+4,ST-2); ctx.lineTo(phX-4,ST-2); ctx.closePath();
+    ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.fill();
+  }
+
+  requestAnimationFrame(draw);
+}
+
+// ── Mouse Interaction ────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+  const mx = e.clientX, my = e.clientY;
+
+  if (drag) {
+    const dx = mx - drag.startX;
+    const dPos = (dx / SW) * visibleRange();
+
+    if (drag.type === 'playhead') {
+      playPos = Math.max(0, Math.min(1, scoreXtoPos(mx)));
+      return;
+    }
+
+    const note = findNoteById(drag.trackIdx, drag.noteId);
+    if (!note) return;
+
+    if (drag.type === 'move') {
+      const ti = trackIdxFromY(my);
+      if (ti >= 0) drag.trackIdx = ti; // allow dragging to other tracks
+      note.start = Math.max(0, Math.min(1 - note.dur, drag.origStart + dPos));
+      // Move to different track
+      const sourceTrack = tracks.find(t => t.notes.some(n => n.id === note.id));
+      const destTrack = tracks[drag.trackIdx];
+      if (sourceTrack && destTrack && sourceTrack !== destTrack) {
+        sourceTrack.notes = sourceTrack.notes.filter(n => n.id !== note.id);
+        destTrack.notes.push(note);
+      }
+    } else if (drag.type === 'resize-right') {
+      note.dur = Math.max(0.01, drag.origDur + dPos);
+    } else if (drag.type === 'resize-left') {
+      const newStart = Math.max(0, drag.origStart + dPos);
+      const newDur = drag.origDur - (newStart - drag.origStart);
+      if (newDur > 0.01) { note.start = newStart; note.dur = newDur; }
+    }
+    return;
+  }
+
+  // Hover
+  if (my >= ST && my <= SB && mx >= SL && mx <= SR) {
+    hoveredNote = findNote(mx, my);
+  } else {
+    hoveredNote = null;
+  }
+  updateCursor(mx, my);
+});
+
+canvas.addEventListener('mousedown', e => {
+  const mx = e.clientX, my = e.clientY;
+  if (e.button === 2) return; // handled by contextmenu
+
+  // Playhead drag (top strip)
+  if (my >= ST-14 && my <= ST+4 && mx >= SL && mx <= SR) {
+    drag = { type:'playhead', startX:mx };
+    playPos = Math.max(0, Math.min(1, scoreXtoPos(mx)));
+    return;
+  }
+
+  if (my < ST || my > SB || mx < SL || mx > SR) return;
+
+  if (activeTool === 'draw') {
+    const ti = trackIdxFromY(my);
+    if (ti < 0) return;
+    const pos = scoreXtoPos(mx);
+    const note = { start:pos, dur:0.05, intensity:0.7, label:null, id:Math.random() };
+    tracks[ti].notes.push(note);
+    drag = { type:'resize-right', trackIdx:ti, noteId:note.id, startX:mx, origStart:pos, origDur:note.dur };
+    return;
+  }
+
+  if (activeTool === 'erase') {
+    const hit = findNote(mx, my);
+    if (hit) tracks[hit.trackIdx].notes = tracks[hit.trackIdx].notes.filter(n => n.id !== hit.note.id);
+    return;
+  }
+
+  // Select tool
+  const hit = findNote(mx, my);
+  if (hit) {
+    const r = noteScreenRect(hit.trackIdx, hit.note);
+    const edge = edgeHit(mx, r);
+    drag = { type:edge, trackIdx:hit.trackIdx, noteId:hit.note.id, startX:mx, origStart:hit.note.start, origDur:hit.note.dur };
+  }
+});
+
+canvas.addEventListener('mouseup', () => { drag = null; });
+canvas.addEventListener('mouseleave', () => { drag = null; hoveredNote = null; });
+
+// Right-click context
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const mx = e.clientX, my = e.clientY;
+
+  // Color click on track swatch
+  if (mx >= SL-24 && mx <= SL-14) {
+    const ti = trackIdxFromY(my);
+    if (ti >= 0) { showColorPicker(ti, null, mx, my); return; }
+  }
+
+  const hit = findNote(mx, my);
+  if (hit) showColorPicker(hit.trackIdx, hit.note, mx, my);
+});
+
+// Double click — rename note label
+canvas.addEventListener('dblclick', e => {
+  const hit = findNote(e.clientX, e.clientY);
+  if (!hit) {
+    // double-click on track label area: rename track
+    if (e.clientX < SL && e.clientY >= ST && e.clientY <= SB) {
+      const ti = trackIdxFromY(e.clientY);
+      if (ti >= 0) {
+        const newName = prompt('Track name:', tracks[ti].name);
+        if (newName) tracks[ti].name = newName.trim();
+      }
+    }
+    return;
+  }
+  const newLabel = prompt('Note label (empty to clear):', hit.note.label || '');
+  if (newLabel !== null) hit.note.label = newLabel.trim() || null;
+});
+
+// ── Color picker ─────────────────────────────────────
+const cpEl = document.getElementById('colorpicker');
+function showColorPicker(trackIdx, note, mx, my) {
+  contextTarget = { trackIdx, note };
+  cpEl.innerHTML = '';
+  PALETTE.forEach(col => {
+    const sw = document.createElement('div');
+    sw.className = 'cpick-swatch';
+    sw.style.background = `rgb(${col[0]},${col[1]},${col[2]})`;
+    sw.addEventListener('click', () => {
+      if (contextTarget.note) {
+        // note has no individual color — color the track
+      }
+      tracks[contextTarget.trackIdx].color = col;
+      cpEl.classList.remove('show');
+    });
+    cpEl.appendChild(sw);
+  });
+  // Also intensity slider when note is target
+  if (note) {
+    const sep = document.createElement('div');
+    sep.style.cssText = 'width:100%;height:1px;background:rgba(255,255,255,0.08);margin:4px 0';
+    cpEl.appendChild(sep);
+    const iLabel = document.createElement('div');
+    iLabel.style.cssText = 'font-size:8px;letter-spacing:0.15em;color:rgba(255,255,255,0.25);text-transform:uppercase;width:100%;';
+    iLabel.textContent = 'intensity';
+    cpEl.appendChild(iLabel);
+    const iSlider = document.createElement('input');
+    iSlider.type = 'range'; iSlider.min=5; iSlider.max=100;
+    iSlider.value = Math.round(note.intensity*100);
+    iSlider.style.cssText = '-webkit-appearance:none;width:100%;height:1px;background:rgba(255,255,255,0.15);outline:none;cursor:pointer;margin-top:6px;';
+    iSlider.addEventListener('input', ev => { note.intensity = ev.target.value/100; });
+    cpEl.appendChild(iSlider);
+  }
+  cpEl.style.left = Math.min(mx, W-140)+'px';
+  cpEl.style.top  = Math.min(my, H-200)+'px';
+  cpEl.classList.add('show');
+}
+document.addEventListener('click', e => {
+  if (!cpEl.contains(e.target)) cpEl.classList.remove('show');
+});
+
+// ── Toolbar buttons ───────────────────────────────────
+function setTool(t) {
+  activeTool = t;
+  document.querySelectorAll('.tool-btn[id^=tool-]').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-'+t).classList.add('active');
+}
+document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
+document.getElementById('tool-draw').addEventListener('click',   () => setTool('draw'));
+document.getElementById('tool-erase').addEventListener('click',  () => setTool('erase'));
+
+document.getElementById('btn-play').addEventListener('click', () => {
+  playing = !playing;
+  document.getElementById('btn-play').textContent = playing ? '■' : '▶';
+});
+document.getElementById('btn-rewind').addEventListener('click', () => { playPos = 0; scrollX = 0; });
+document.getElementById('btn-slower').addEventListener('click', () => { tempo = Math.max(0.01, tempo * 0.75); });
+document.getElementById('btn-faster').addEventListener('click', () => { tempo = Math.min(0.4, tempo * 1.33); });
+document.getElementById('btn-zoomin').addEventListener('click',  () => {
+  zoom = Math.min(8, zoom * 1.5);
+  scrollX = Math.max(0, Math.min(1-visibleRange(), playPos - visibleRange()*0.4));
+});
+document.getElementById('btn-zoomout').addEventListener('click', () => {
+  zoom = Math.max(1, zoom / 1.5);
+  scrollX = Math.max(0, Math.min(1-visibleRange(), scrollX));
+});
+document.getElementById('btn-addtrack').addEventListener('click', () => {
+  const name = prompt('New track name:','untitled');
+  if (!name) return;
+  const ci = Math.floor(Math.random()*PALETTE.length);
+  tracks.push({ name:name.trim(), color:PALETTE[ci], notes:[] });
+});
+
+// Keyboard shortcuts
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code==='Space') { e.preventDefault(); document.getElementById('btn-play').click(); }
+  if (e.code==='KeyV') setTool('select');
+  if (e.code==='KeyD') setTool('draw');
+  if (e.code==='KeyE') setTool('erase');
+  if (e.code==='Home') document.getElementById('btn-rewind').click();
+  if (e.code==='Equal'||e.code==='NumpadAdd') document.getElementById('btn-zoomin').click();
+  if (e.code==='Minus'||e.code==='NumpadSubtract') document.getElementById('btn-zoomout').click();
+  // Delete selected — no persistent selection yet, skip
+});
+
+// Scroll to zoom
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.deltaY < 0) document.getElementById('btn-zoomin').click();
+  else document.getElementById('btn-zoomout').click();
+}, { passive:false });
+
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

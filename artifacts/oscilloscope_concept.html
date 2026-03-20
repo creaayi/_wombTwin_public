@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: #04080a; overflow: hidden; font-family: 'Courier New', monospace; }
+canvas { display: block; position: absolute; top:0; left:0; }
+#ui { position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none; }
+
+#top {
+  position: absolute; top:0; left:0; right:0;
+  padding: 24px 32px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  background: linear-gradient(to bottom, rgba(4,8,10,0.92) 0%, transparent 100%);
+}
+#title { font-size: 10px; letter-spacing: 0.35em; color: rgba(180,220,180,0.2); text-transform: uppercase; line-height: 1.8; }
+#state-block { text-align: right; line-height: 1.7; }
+#state-name { font-size: 10px; letter-spacing: 0.28em; color: rgba(140,220,160,0.5); text-transform: uppercase; transition: color 1s; }
+#state-desc { font-size: 9px; letter-spacing: 0.08em; color: rgba(255,255,255,0.13); font-style: italic; max-width: 240px; text-align: right; line-height: 1.6; }
+
+/* Phosphor scanline overlay */
+#scanlines {
+  position: absolute; top:0; left:0; right:0; bottom:0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0,0,0,0.07) 3px,
+    rgba(0,0,0,0.07) 4px
+  );
+  pointer-events: none;
+}
+
+/* CRT vignette */
+#vignette {
+  position: absolute; top:0; left:0; right:0; bottom:0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.75) 100%);
+  pointer-events: none;
+}
+
+#bottom {
+  position: absolute; bottom:0; left:0; right:0;
+  padding: 22px 32px;
+  display: flex; justify-content: space-between; align-items: flex-end;
+  background: linear-gradient(to top, rgba(4,8,10,0.92) 0%, transparent 100%);
+  pointer-events: all;
+}
+.ctrl-row { display: flex; gap: 28px; align-items: flex-end; }
+.ctrl { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ctrl-label { font-size: 8px; letter-spacing: 0.22em; color: rgba(140,220,160,0.2); text-transform: uppercase; }
+input[type=range] {
+  -webkit-appearance: none; width: 80px; height: 1px;
+  background: rgba(140,220,160,0.12); outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(140,220,160,0.5); cursor: pointer;
+}
+#note { font-size: 8px; letter-spacing: 0.18em; color: rgba(140,220,160,0.1); text-transform: uppercase; text-align: right; line-height: 1.9; }
+
+/* BPM readout */
+#bpm-display {
+  position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; letter-spacing: 0.3em; color: rgba(140,220,160,0.18);
+  text-transform: uppercase; text-align: center; line-height: 1.8;
+  transition: color 0.8s;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<div id="ui">
+  <div id="top">
+    <div id="title">wombTwin<br>visual concept — 1</div>
+    <div id="state-block">
+      <div id="state-name">before</div>
+      <div id="state-desc">a life lived at a slight distance from itself</div>
+    </div>
+  </div>
+  <div id="bpm-display">
+    <span id="bpm-val">— bpm</span><br>
+    <span id="signal-label">signal a</span>
+  </div>
+  <div id="bottom">
+    <div class="ctrl-row">
+      <div class="ctrl">
+        <input type="range" id="beat-ctrl" min="0" max="100" value="15">
+        <div class="ctrl-label">moment</div>
+      </div>
+      <div class="ctrl">
+        <input type="range" id="gain-ctrl" min="10" max="100" value="55">
+        <div class="ctrl-label">amplitude</div>
+      </div>
+      <div class="ctrl">
+        <input type="range" id="twin-ctrl" min="0" max="100" value="0">
+        <div class="ctrl-label">twin signal</div>
+      </div>
+    </div>
+    <div id="note">oscilloscope<br>visual concept — 1</div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+let moment = 0.15;   // emotional position 0..1
+let gain = 0.55;     // amplitude
+let twinMix = 0.0;   // second signal presence
+let t = 0;
+
+document.getElementById('beat-ctrl').addEventListener('input', e => { moment = e.target.value / 100; updateState(); });
+document.getElementById('gain-ctrl').addEventListener('input', e => { gain = e.target.value / 100; });
+document.getElementById('twin-ctrl').addEventListener('input', e => {
+  twinMix = e.target.value / 100;
+  updateBPMLabel();
+});
+
+// Emotional states mapped to moment slider
+const STATES = [
+  { t: 0.00, end: 0.20, name: 'before', desc: 'a life lived at a slight distance from itself', bpm: 62, color: [140, 220, 160] },
+  { t: 0.20, end: 0.38, name: 'revelation', desc: 'the body knows first — heart before mind', bpm: 95, color: [140, 180, 220] },
+  { t: 0.38, end: 0.55, name: 'euphoric reunion', desc: 'for a few seconds, together again', bpm: 118, color: [160, 220, 140] },
+  { t: 0.55, end: 0.72, name: 'grief', desc: 'losing her a second time', bpm: 48, color: [220, 130, 130] },
+  { t: 0.72, end: 0.88, name: 'second revelation', desc: 'his whole life was already a mourning', bpm: 55, color: [160, 140, 220] },
+  { t: 0.88, end: 1.01, name: 'reorientation', desc: 'lighter — starting the healing path', bpm: 70, color: [200, 190, 140] },
+];
+
+let currentState = STATES[0];
+
+function getState(m) {
+  return STATES.find(s => m >= s.t && m < s.end) || STATES[STATES.length - 1];
+}
+
+function updateState() {
+  const s = getState(moment);
+  if (s !== currentState) {
+    currentState = s;
+    const [r, g, b] = s.color;
+    document.getElementById('state-name').textContent = s.name;
+    document.getElementById('state-name').style.color = `rgba(${r},${g},${b},0.55)`;
+    document.getElementById('state-desc').textContent = s.desc;
+    updateBPMLabel();
+  }
+}
+
+function updateBPMLabel() {
+  const s = currentState;
+  const bpmA = s.bpm;
+  const bpmB = Math.round(bpmA * (1 + twinMix * 0.15));
+  document.getElementById('bpm-val').textContent = twinMix > 0.05
+    ? `${bpmA} · ${bpmB} bpm`
+    : `${bpmA} bpm`;
+  document.getElementById('signal-label').textContent = twinMix > 0.05
+    ? 'signal a  ·  signal b'
+    : 'signal a';
+}
+
+updateState();
+
+// --- WAVEFORM GENERATION ---
+// ECG-like heartbeat for a given BPM
+function heartbeatSample(phase, bpm, character) {
+  // phase 0..1 = one beat cycle
+  // character: 0=calm, 1=intense
+  const p = phase % 1;
+
+  // P wave (small rise)
+  const P = 0.08 * Math.exp(-Math.pow((p - 0.12) / 0.04, 2));
+  // Q dip
+  const Q = -0.05 * Math.exp(-Math.pow((p - 0.22) / 0.015, 2));
+  // R spike (main)
+  const R = (0.5 + character * 0.5) * Math.exp(-Math.pow((p - 0.26) / 0.012, 2));
+  // S dip
+  const S = -(0.1 + character * 0.1) * Math.exp(-Math.pow((p - 0.31) / 0.018, 2));
+  // T wave (recovery)
+  const T = (0.12 + character * 0.1) * Math.exp(-Math.pow((p - 0.42) / 0.06, 2));
+  // baseline drift (grief = unstable)
+  const drift = character > 0.7 ? 0.04 * Math.sin(phase * Math.PI * 2.3) : 0;
+
+  return P + Q + R + S + T + drift;
+}
+
+// Trail buffer for phosphor persistence
+const TRAIL_LEN = 3;
+const trails = [];
+
+function sampleWaveform(x, time, state, twinMix) {
+  const bpm = state.bpm;
+  const character = Math.min((bpm - 45) / 75, 1); // 0=slow/calm, 1=intense
+
+  // Speed: how many beats visible on screen
+  const beatsVisible = bpm / 15; // higher BPM = more beats visible
+  const phase = (x / W) * beatsVisible + time * (bpm / 60) * 0.15;
+
+  const sigA = heartbeatSample(phase, bpm, character);
+
+  if (twinMix < 0.01) return sigA;
+
+  // Twin signal: slightly different frequency, phase offset
+  const bpmB = bpm * (1 + 0.12);
+  const phaseB = phase * (bpmB / bpm) + twinMix * 0.8;
+  const charB = character * (1 - twinMix * 0.2);
+  const sigB = heartbeatSample(phaseB, bpmB, charB);
+
+  // Interference between A and B
+  const blend = twinMix;
+  const interference = sigA * (1 - blend * 0.5) + sigB * blend * 0.5;
+  return interference;
+}
+
+// Multi-channel display
+const CHANNELS = [
+  { label: 'I', yFrac: 0.22, scale: 1.0 },
+  { label: 'II', yFrac: 0.50, scale: 1.15 },
+  { label: 'III', yFrac: 0.78, scale: 0.85 },
+];
+
+let frame = 0;
+
+function draw() {
+  // Phosphor persistence — don't fully clear
+  ctx.fillStyle = 'rgba(4,8,10,0.35)';
+  ctx.fillRect(0, 0, W, H);
+
+  const state = currentState;
+  const [r, g, b] = state.color;
+  const character = Math.min((state.bpm - 45) / 75, 1);
+
+  // Channel labels (left margin)
+  CHANNELS.forEach((ch, ci) => {
+    const cy = H * ch.yFrac;
+    // Channel axis line
+    ctx.beginPath();
+    ctx.moveTo(40, cy);
+    ctx.lineTo(W - 40, cy);
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.05)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Channel label
+    ctx.fillStyle = `rgba(${r},${g},${b},0.18)`;
+    ctx.font = '8px Courier New';
+    ctx.textAlign = 'left';
+    ctx.fillText(ch.label, 12, cy + 3);
+
+    // Scale markers
+    const tickH = H * 0.06 * ch.scale * gain;
+    ctx.beginPath();
+    ctx.moveTo(36, cy - tickH);
+    ctx.lineTo(40, cy - tickH);
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.12)`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    ctx.fillStyle = `rgba(${r},${g},${b},0.1)`;
+    ctx.font = '7px Courier New';
+    ctx.fillText('1mV', 12, cy - tickH + 3);
+  });
+
+  // Time grid
+  const gridDivs = 10;
+  for (let i = 0; i <= gridDivs; i++) {
+    const x = 40 + (i / gridDivs) * (W - 80);
+    ctx.beginPath();
+    ctx.moveTo(x, H * 0.08);
+    ctx.lineTo(x, H * 0.92);
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.04)`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    if (i % 2 === 0) {
+      ctx.fillStyle = `rgba(${r},${g},${b},0.1)`;
+      ctx.font = '7px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${i * 0.1}s`, x, H * 0.92 + 12);
+    }
+  }
+
+  // WAVEFORMS
+  CHANNELS.forEach((ch, ci) => {
+    const cy = H * ch.yFrac;
+    const ampH = H * 0.09 * ch.scale * gain;
+    const phaseOffset = ci * 0.18; // each channel slightly offset
+
+    // Glow pass (wide, faint)
+    ctx.beginPath();
+    for (let px = 40; px <= W - 40; px += 2) {
+      const xNorm = (px - 40) / (W - 80);
+      const sample = sampleWaveform(px, t + phaseOffset * 10, state, twinMix);
+      const py = cy - sample * ampH;
+      if (px === 40) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.08)`;
+    ctx.lineWidth = 6;
+    ctx.stroke();
+
+    // Medium glow
+    ctx.beginPath();
+    for (let px = 40; px <= W - 40; px += 1.5) {
+      const xNorm = (px - 40) / (W - 80);
+      const sample = sampleWaveform(px, t + phaseOffset * 10, state, twinMix);
+      const py = cy - sample * ampH;
+      if (px === 40) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.18)`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Core line (sharp)
+    ctx.beginPath();
+    for (let px = 40; px <= W - 40; px++) {
+      const sample = sampleWaveform(px, t + phaseOffset * 10, state, twinMix);
+      const py = cy - sample * ampH;
+      if (px === 40) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.75)`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Peaks — extra bright at R spike
+    // Find and highlight the R spikes
+    for (let px = 42; px < W - 42; px += 2) {
+      const sample = sampleWaveform(px, t + phaseOffset * 10, state, twinMix);
+      if (sample > 0.35 + character * 0.2) {
+        const py = cy - sample * ampH;
+        const intensity = Math.min((sample - 0.3) / 0.6, 1);
+        ctx.beginPath();
+        ctx.arc(px, py, 1.5 + intensity * 2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${Math.min(r + 60, 255)},${Math.min(g + 60, 255)},${Math.min(b + 60, 255)},${0.4 + intensity * 0.5})`;
+        ctx.fill();
+      }
+    }
+
+    // If twin signal present — draw it as a ghost overlay
+    if (twinMix > 0.05) {
+      const bpmB = state.bpm * 1.12;
+      ctx.beginPath();
+      for (let px = 40; px <= W - 40; px += 2) {
+        const phaseB = (px / W) * (bpmB / 15) + t * (bpmB / 60) * 0.15 + phaseOffset * 10 + twinMix * 0.8;
+        const charB = character * (1 - twinMix * 0.2);
+        const sample = heartbeatSample(phaseB, bpmB, charB);
+        const py = cy - sample * ampH;
+        if (px === 40) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      // Twin is a different color — slightly cooler
+      const tR = Math.round(r * 0.6 + 60);
+      const tG = Math.round(g * 0.6 + 80);
+      const tB = Math.round(b * 0.8 + 60);
+      ctx.strokeStyle = `rgba(${tR},${tG},${tB},${twinMix * 0.35})`;
+      ctx.lineWidth = 0.6;
+      ctx.setLineDash([3, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  });
+
+  // Scrolling time cursor
+  const cursorX = 40 + ((t * 0.08 * (state.bpm / 60)) % 1) * (W - 80);
+  const cGrad = ctx.createLinearGradient(cursorX - 20, 0, cursorX + 4, 0);
+  cGrad.addColorStop(0, 'transparent');
+  cGrad.addColorStop(1, `rgba(${r},${g},${b},0.12)`);
+  ctx.fillStyle = cGrad;
+  ctx.fillRect(cursorX - 20, H * 0.08, 24, H * 0.84);
+
+  ctx.beginPath();
+  ctx.moveTo(cursorX, H * 0.08);
+  ctx.lineTo(cursorX, H * 0.92);
+  ctx.strokeStyle = `rgba(${r},${g},${b},0.3)`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // BPM ticker — flash on heartbeat
+  const beatPhase = (t * (state.bpm / 60)) % 1;
+  if (beatPhase < 0.08) {
+    const flashAlpha = (1 - beatPhase / 0.08) * 0.6;
+    document.getElementById('bpm-val').style.color = `rgba(${r},${g},${b},${flashAlpha + 0.18})`;
+  } else {
+    document.getElementById('bpm-val').style.color = `rgba(${r},${g},${b},0.18)`;
+  }
+
+  t += 0.012;
+  frame++;
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>

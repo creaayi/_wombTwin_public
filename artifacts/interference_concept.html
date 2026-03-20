@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: #080810; overflow: hidden; font-family: 'Courier New', monospace; }
+canvas { display: block; }
+#beat-label {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  letter-spacing: 0.35em;
+  color: rgba(255,255,255,0.22);
+  text-transform: uppercase;
+  transition: color 0.8s, opacity 0.8s;
+  white-space: nowrap;
+}
+#controls {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 40px;
+  align-items: flex-end;
+}
+.ctrl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.ctrl-label {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  color: rgba(255,255,255,0.18);
+  text-transform: uppercase;
+}
+input[type=range] {
+  -webkit-appearance: none;
+  width: 90px;
+  height: 1px;
+  background: rgba(255,255,255,0.12);
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.45);
+  cursor: pointer;
+}
+#corner-text {
+  position: absolute;
+  bottom: 28px;
+  right: 32px;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.1);
+  text-transform: uppercase;
+  line-height: 1.8;
+  text-align: right;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="beat-label">interference</div>
+<div id="controls">
+  <div class="ctrl">
+    <input type="range" id="separation" min="0" max="100" value="45">
+    <div class="ctrl-label">separation</div>
+  </div>
+  <div class="ctrl">
+    <input type="range" id="pulse" min="5" max="95" value="28">
+    <div class="ctrl-label">pulse</div>
+  </div>
+  <div class="ctrl">
+    <input type="range" id="density" min="5" max="95" value="40">
+    <div class="ctrl-label">density</div>
+  </div>
+</div>
+<div id="corner-text">
+  wombTwin<br>
+  visual concept — 4
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+let t = 0;
+let separation = 0.45;
+let pulseSpeed = 0.28;
+let density = 0.4;
+
+const sepSlider = document.getElementById('separation');
+const pulseSlider = document.getElementById('pulse');
+const densitySlider = document.getElementById('density');
+const beatLabel = document.getElementById('beat-label');
+
+sepSlider.addEventListener('input', e => { separation = e.target.value / 100; updateLabel(); });
+pulseSlider.addEventListener('input', e => { pulseSpeed = e.target.value / 100; });
+densitySlider.addEventListener('input', e => { density = e.target.value / 100; });
+
+function updateLabel() {
+  const s = separation;
+  if (s < 0.08) {
+    beatLabel.textContent = 'union — amniotic space — they were one';
+    beatLabel.style.color = 'rgba(160,210,160,0.55)';
+  } else if (s < 0.22) {
+    beatLabel.textContent = 'euphoric reunion — a few seconds together again';
+    beatLabel.style.color = 'rgba(200,195,140,0.55)';
+  } else if (s < 0.42) {
+    beatLabel.textContent = 'revelation — the body knows first';
+    beatLabel.style.color = 'rgba(140,170,210,0.55)';
+  } else if (s < 0.62) {
+    beatLabel.textContent = 'interference — a life lived at a distance from itself';
+    beatLabel.style.color = 'rgba(200,200,200,0.22)';
+  } else if (s < 0.80) {
+    beatLabel.textContent = 'grief — losing her a second time';
+    beatLabel.style.color = 'rgba(190,120,120,0.55)';
+  } else {
+    beatLabel.textContent = 'reorientation — the same life, not the same person';
+    beatLabel.style.color = 'rgba(180,160,200,0.45)';
+  }
+}
+
+// Clear once, then trail
+let firstFrame = true;
+
+function draw() {
+  if (firstFrame) {
+    ctx.fillStyle = '#080810';
+    ctx.fillRect(0, 0, W, H);
+    firstFrame = false;
+  }
+
+  ctx.fillStyle = 'rgba(8,8,16,0.18)';
+  ctx.fillRect(0, 0, W, H);
+
+  const numWaves = Math.floor(12 + density * 55);
+  const maxAmp = H * 0.22;
+
+  for (let i = 0; i < numWaves; i++) {
+    const norm = i / numWaves;
+    const yBase = norm * H;
+
+    // Wave A parameters
+    const freqA = 1.8 + norm * 2.4;
+    const ampA = maxAmp * (0.2 + 0.8 * Math.sin(norm * Math.PI));
+
+    // Wave B — twin, phase shifted by separation
+    const phaseOffset = separation * Math.PI * 5;
+    const freqB = freqA * (1 + separation * 0.18);
+
+    // Sample the interference at this row
+    const sampleX = 0.5;
+    const wA = Math.sin(sampleX * Math.PI * 8 * freqA + t * (0.6 + pulseSpeed * 2) + norm * Math.PI * 3);
+    const wB = Math.sin(sampleX * Math.PI * 8 * freqB + t * (0.65 + pulseSpeed * 2) + norm * Math.PI * 3 + phaseOffset);
+    const interfere = (wA + wB) * 0.5;
+    const constructive = (Math.abs(interfere) + 0.3) / 1.3; // 0..1
+
+    // Color palette based on separation state
+    let r, g, b, baseAlpha;
+    if (separation < 0.12) {
+      // Union: aqueous, warm green-white
+      r = 140 + constructive * 90;
+      g = 200 + constructive * 50;
+      b = 155 + constructive * 70;
+      baseAlpha = 0.07 + constructive * 0.28;
+    } else if (separation < 0.35) {
+      // Revelation zone: blue-gold
+      r = 130 + constructive * 110;
+      g = 155 + constructive * 90;
+      b = 195 + constructive * 55;
+      baseAlpha = 0.06 + constructive * 0.22;
+    } else if (separation < 0.65) {
+      // Interference / wound: cold white
+      r = 140 + constructive * 90;
+      g = 150 + constructive * 85;
+      b = 175 + constructive * 65;
+      baseAlpha = 0.04 + constructive * 0.14;
+    } else {
+      // Grief: muted rose-violet
+      r = 175 + constructive * 60;
+      g = 110 + constructive * 60;
+      b = 155 + constructive * 70;
+      baseAlpha = 0.06 + constructive * 0.22;
+    }
+
+    ctx.beginPath();
+    let started = false;
+    const steps = Math.floor(W / 1.2);
+
+    for (let xi = 0; xi <= steps; xi++) {
+      const x = (xi / steps) * W;
+      const xNorm = xi / steps;
+
+      const envelope = Math.sin(xNorm * Math.PI); // fade edges
+      const waveA = Math.sin(xNorm * Math.PI * 8 * freqA + t * (0.6 + pulseSpeed * 2) + norm * Math.PI * 3) *
+                    Math.cos(xNorm * Math.PI * 1.5 + t * 0.2);
+      const waveB = Math.sin(xNorm * Math.PI * 8 * freqB + t * (0.65 + pulseSpeed * 2) + norm * Math.PI * 3 + phaseOffset) *
+                    Math.cos(xNorm * Math.PI * 1.5 + t * 0.2 + phaseOffset * 0.3);
+
+      const combined = (waveA + waveB) * 0.5 * envelope;
+      const y = yBase + combined * ampA;
+
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+
+    ctx.strokeStyle = `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${baseAlpha})`;
+    ctx.lineWidth = 0.7 + constructive * 0.5;
+    ctx.stroke();
+  }
+
+  // Soft vertical glow where waves align most (center tends to be where constructive interference peaks)
+  const glowX = W * (0.5 + Math.sin(t * 0.25) * 0.08);
+  const glowGrad = ctx.createRadialGradient(glowX, H * 0.5, 0, glowX, H * 0.5, W * 0.25);
+  const glowAlpha = (1 - separation) * 0.04;
+  glowGrad.addColorStop(0, `rgba(200,230,200,${glowAlpha})`);
+  glowGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = glowGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  t += 0.004 + pulseSpeed * 0.018;
+  requestAnimationFrame(draw);
+}
+
+draw();
+updateLabel();
+</script>
+</body>
+</html>

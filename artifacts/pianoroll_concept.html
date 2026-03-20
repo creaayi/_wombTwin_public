@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: #09090e; overflow: hidden; font-family: 'Courier New', monospace; color: rgba(255,255,255,0.6); }
+canvas { display: block; position: absolute; top:0; left:0; }
+
+#ui {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+}
+
+#top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 20px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: linear-gradient(to bottom, rgba(9,9,14,0.95) 0%, transparent 100%);
+}
+
+#title-block { line-height: 1.4; }
+#title-main {
+  font-size: 11px;
+  letter-spacing: 0.35em;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+}
+#title-sub {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.18);
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+
+#playhead-label {
+  text-align: right;
+  line-height: 1.6;
+}
+#beat-name {
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+  transition: color 0.6s;
+}
+#beat-desc {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.18);
+  font-style: italic;
+  max-width: 280px;
+  text-align: right;
+  line-height: 1.5;
+  transition: color 0.6s;
+}
+
+#bottom-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 20px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  background: linear-gradient(to top, rgba(9,9,14,0.95) 0%, transparent 100%);
+  pointer-events: all;
+}
+
+.ctrl-row {
+  display: flex;
+  gap: 32px;
+  align-items: flex-end;
+}
+.ctrl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.ctrl-label {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.18);
+  text-transform: uppercase;
+}
+input[type=range] {
+  -webkit-appearance: none;
+  width: 80px;
+  height: 1px;
+  background: rgba(255,255,255,0.12);
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.4);
+  cursor: pointer;
+}
+
+#play-btn {
+  width: 28px; height: 28px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: transparent;
+  color: rgba(255,255,255,0.35);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.3s;
+  pointer-events: all;
+}
+#play-btn:hover {
+  border-color: rgba(255,255,255,0.35);
+  color: rgba(255,255,255,0.7);
+}
+
+#corner-note {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: rgba(255,255,255,0.1);
+  text-transform: uppercase;
+  line-height: 1.8;
+  text-align: right;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <div id="top-bar">
+    <div id="title-block">
+      <div id="title-main">wombTwin</div>
+      <div id="title-sub">emotional score — visual concept 3</div>
+    </div>
+    <div id="playhead-label">
+      <div id="beat-name">—</div>
+      <div id="beat-desc"></div>
+    </div>
+  </div>
+
+  <div id="bottom-bar">
+    <div class="ctrl-row">
+      <button id="play-btn">▶</button>
+      <div class="ctrl">
+        <input type="range" id="tempo" min="10" max="100" value="38">
+        <div class="ctrl-label">tempo</div>
+      </div>
+      <div class="ctrl">
+        <input type="range" id="zoom" min="20" max="100" value="55">
+        <div class="ctrl-label">zoom</div>
+      </div>
+      <div class="ctrl">
+        <input type="range" id="opacity-ctrl" min="20" max="100" value="60">
+        <div class="ctrl-label">ghost layer</div>
+      </div>
+    </div>
+    <div id="corner-note">
+      time moves left → right<br>
+      each row — an emotional register
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// --- SCORE DATA ---
+// Each "track" is an emotional register (row)
+// Notes: { start, duration, intensity, label? }
+const TRACKS = [
+  {
+    name: 'body',
+    color: [180, 140, 110],
+    notes: [
+      { start: 0.02, dur: 0.06, intensity: 0.3 },
+      { start: 0.10, dur: 0.04, intensity: 0.25 },
+      { start: 0.18, dur: 0.05, intensity: 0.35 },
+      { start: 0.28, dur: 0.08, intensity: 0.5, label: 'the body knows' },
+      { start: 0.38, dur: 0.12, intensity: 0.9, label: 'recognition' },
+      { start: 0.52, dur: 0.18, intensity: 0.7 },
+      { start: 0.72, dur: 0.06, intensity: 0.45 },
+      { start: 0.82, dur: 0.10, intensity: 0.6 },
+      { start: 0.93, dur: 0.05, intensity: 0.35 },
+    ]
+  },
+  {
+    name: 'memory',
+    color: [110, 150, 190],
+    notes: [
+      { start: 0.05, dur: 0.03, intensity: 0.2 },
+      { start: 0.14, dur: 0.05, intensity: 0.3 },
+      { start: 0.24, dur: 0.03, intensity: 0.2 },
+      { start: 0.35, dur: 0.15, intensity: 0.85, label: 'revelation 1' },
+      { start: 0.55, dur: 0.08, intensity: 0.6 },
+      { start: 0.66, dur: 0.20, intensity: 0.95, label: 'revelation 2' },
+      { start: 0.88, dur: 0.08, intensity: 0.5 },
+    ]
+  },
+  {
+    name: 'twin',
+    color: [140, 190, 150],
+    notes: [
+      // sparse until reunion, then the most active track
+      { start: 0.08, dur: 0.02, intensity: 0.15 },
+      { start: 0.20, dur: 0.02, intensity: 0.15 },
+      { start: 0.38, dur: 0.05, intensity: 0.5 },
+      { start: 0.44, dur: 0.14, intensity: 1.0, label: 'euphoric reunion' },
+      { start: 0.60, dur: 0.12, intensity: 0.7, label: 'amniotic choreography' },
+      { start: 0.74, dur: 0.04, intensity: 0.3 },
+      { start: 0.85, dur: 0.03, intensity: 0.25 },
+      { start: 0.94, dur: 0.04, intensity: 0.35 },
+    ]
+  },
+  {
+    name: 'grief',
+    color: [190, 110, 110],
+    notes: [
+      { start: 0.0,  dur: 0.08, intensity: 0.2 },
+      { start: 0.12, dur: 0.06, intensity: 0.25 },
+      { start: 0.22, dur: 0.05, intensity: 0.3 },
+      { start: 0.32, dur: 0.04, intensity: 0.4 },
+      { start: 0.56, dur: 0.22, intensity: 0.95, label: 'grief — second loss' },
+      { start: 0.80, dur: 0.08, intensity: 0.5 },
+      { start: 0.90, dur: 0.05, intensity: 0.3 },
+    ]
+  },
+  {
+    name: 'silence',
+    color: [160, 155, 175],
+    notes: [
+      { start: 0.03, dur: 0.07, intensity: 0.5 },
+      { start: 0.16, dur: 0.06, intensity: 0.4 },
+      { start: 0.26, dur: 0.08, intensity: 0.55 },
+      { start: 0.42, dur: 0.03, intensity: 0.3 },
+      { start: 0.50, dur: 0.04, intensity: 0.45 },
+      { start: 0.64, dur: 0.02, intensity: 0.3 },
+      { start: 0.78, dur: 0.12, intensity: 0.7, label: 'reorientation' },
+      { start: 0.92, dur: 0.06, intensity: 0.55 },
+    ]
+  },
+  {
+    name: 'light',
+    color: [200, 185, 140],
+    notes: [
+      { start: 0.01, dur: 0.03, intensity: 0.2 },
+      { start: 0.09, dur: 0.02, intensity: 0.18 },
+      { start: 0.44, dur: 0.16, intensity: 0.8, label: 'euphoria inside grief' },
+      { start: 0.78, dur: 0.18, intensity: 0.85, label: 'lighter — healing path' },
+      { start: 0.97, dur: 0.03, intensity: 0.6 },
+    ]
+  },
+];
+
+// Beat regions for playhead label
+const BEAT_REGIONS = [
+  { start: 0.00, end: 0.28, name: 'before', desc: 'a life lived at a slight distance from itself' },
+  { start: 0.28, end: 0.44, name: 'revelation', desc: 'the body knows first — he had a twin' },
+  { start: 0.44, end: 0.56, name: 'euphoric reunion', desc: 'for a few seconds, they are together again' },
+  { start: 0.56, end: 0.78, name: 'grief', desc: 'losing her a second time — and understanding he always had' },
+  { start: 0.78, end: 1.00, name: 'reorientation', desc: 'the same life — not the same person' },
+];
+
+const BEAT_COLORS = {
+  'before': 'rgba(200,200,200,0.3)',
+  'revelation': 'rgba(140,170,210,0.55)',
+  'euphoric reunion': 'rgba(140,190,150,0.6)',
+  'grief': 'rgba(190,110,110,0.55)',
+  'reorientation': 'rgba(200,185,140,0.55)',
+};
+
+let playing = false;
+let playPos = 0; // 0..1
+let tempo = 0.38;
+let zoom = 0.55;
+let ghostOpacity = 0.6;
+let scrollOffset = 0; // in score-space 0..1
+let lastTime = null;
+
+document.getElementById('play-btn').addEventListener('click', () => {
+  playing = !playing;
+  document.getElementById('play-btn').textContent = playing ? '■' : '▶';
+  if (playing && playPos >= 0.98) playPos = 0;
+});
+document.getElementById('tempo').addEventListener('input', e => tempo = e.target.value / 100);
+document.getElementById('zoom').addEventListener('input', e => zoom = e.target.value / 100);
+document.getElementById('opacity-ctrl').addEventListener('input', e => ghostOpacity = e.target.value / 100);
+
+// Click on canvas to scrub
+canvas.addEventListener('click', e => {
+  const scoreLeft = W * 0.08;
+  const scoreRight = W * 0.92;
+  if (e.clientX > scoreLeft && e.clientX < scoreRight) {
+    const x = (e.clientX - scoreLeft) / (scoreRight - scoreLeft);
+    // map x through scroll/zoom to score position
+    playPos = scrollOffset + x / zoomScale();
+    playPos = Math.max(0, Math.min(1, playPos));
+  }
+});
+
+function zoomScale() { return 0.3 + zoom * 1.4; }
+
+function getRegion(pos) {
+  for (const r of BEAT_REGIONS) {
+    if (pos >= r.start && pos < r.end) return r;
+  }
+  return BEAT_REGIONS[BEAT_REGIONS.length - 1];
+}
+
+let lastRegion = null;
+
+function updateLabel(pos) {
+  const r = getRegion(pos);
+  if (r !== lastRegion) {
+    lastRegion = r;
+    const beatName = document.getElementById('beat-name');
+    const beatDesc = document.getElementById('beat-desc');
+    beatName.textContent = r.name;
+    beatName.style.color = BEAT_COLORS[r.name] || 'rgba(255,255,255,0.35)';
+    beatDesc.textContent = r.desc;
+  }
+}
+
+function draw(ts) {
+  if (lastTime === null) lastTime = ts;
+  const dt = (ts - lastTime) / 1000;
+  lastTime = ts;
+
+  if (playing) {
+    playPos += dt * tempo * 0.12;
+    if (playPos > 1) { playPos = 0; }
+    // auto-scroll
+    const visibleWidth = 1 / zoomScale();
+    if (playPos > scrollOffset + visibleWidth * 0.7) {
+      scrollOffset = playPos - visibleWidth * 0.7;
+    }
+    if (playPos < scrollOffset + visibleWidth * 0.1) {
+      scrollOffset = playPos - visibleWidth * 0.1;
+    }
+    scrollOffset = Math.max(0, Math.min(1 - visibleWidth, scrollOffset));
+  }
+
+  updateLabel(playPos);
+
+  // Background
+  ctx.fillStyle = '#09090e';
+  ctx.fillRect(0, 0, W, H);
+
+  const scoreLeft = W * 0.08;
+  const scoreRight = W * 0.92;
+  const scoreW = scoreRight - scoreLeft;
+  const scoreTop = H * 0.12;
+  const scoreBottom = H * 0.88;
+  const scoreH = scoreBottom - scoreTop;
+
+  const numTracks = TRACKS.length;
+  const trackH = scoreH / numTracks;
+  const visibleRange = 1 / zoomScale();
+
+  // Score background — subtle grid
+  for (let i = 0; i <= numTracks; i++) {
+    const y = scoreTop + i * trackH;
+    ctx.beginPath();
+    ctx.moveTo(scoreLeft, y);
+    ctx.lineTo(scoreRight, y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Vertical grid lines (time markers)
+  const numDivisions = Math.floor(8 * zoomScale());
+  for (let i = 0; i <= numDivisions; i++) {
+    const scoreX = i / numDivisions;
+    const absX = scrollOffset + scoreX * visibleRange;
+    if (absX < 0 || absX > 1) continue;
+    const px = scoreLeft + scoreX * scoreW;
+    ctx.beginPath();
+    ctx.moveTo(px, scoreTop);
+    ctx.lineTo(px, scoreBottom);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Time label
+    if (i % 2 === 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.font = '8px Courier New';
+      ctx.fillText(Math.round(absX * 100) + '%', px - 8, scoreTop - 6);
+    }
+  }
+
+  // Beat region bands (background tint)
+  for (const r of BEAT_REGIONS) {
+    const x0 = scoreLeft + ((r.start - scrollOffset) / visibleRange) * scoreW;
+    const x1 = scoreLeft + ((r.end - scrollOffset) / visibleRange) * scoreW;
+    const clampX0 = Math.max(scoreLeft, x0);
+    const clampX1 = Math.min(scoreRight, x1);
+    if (clampX1 <= clampX0) continue;
+
+    const col = BEAT_COLORS[r.name] || 'rgba(255,255,255,0.02)';
+    // extract rgba and make very faint
+    ctx.fillStyle = col.replace(/[\d.]+\)$/, m => (parseFloat(m) * 0.08) + ')');
+    ctx.fillRect(clampX0, scoreTop, clampX1 - clampX0, scoreH);
+
+    // Region label at top
+    if (x0 > scoreLeft - 60 && x0 < scoreRight) {
+      ctx.fillStyle = col.replace(/[\d.]+\)$/, '0.22)');
+      ctx.font = '8px Courier New';
+      ctx.letterSpacing = '0.15em';
+      ctx.fillText(r.name.toUpperCase(), Math.max(clampX0 + 4, scoreLeft + 2), scoreTop - 6);
+    }
+  }
+
+  // Track labels (left)
+  TRACKS.forEach((track, ti) => {
+    const y = scoreTop + ti * trackH + trackH * 0.5;
+    ctx.fillStyle = `rgba(${track.color[0]},${track.color[1]},${track.color[2]},0.25)`;
+    ctx.font = '8px Courier New';
+    ctx.textAlign = 'right';
+    ctx.fillText(track.name.toUpperCase(), scoreLeft - 8, y + 3);
+  });
+  ctx.textAlign = 'left';
+
+  // NOTES
+  TRACKS.forEach((track, ti) => {
+    const yTop = scoreTop + ti * trackH + trackH * 0.1;
+    const noteH = trackH * 0.8;
+    const [r, g, b] = track.color;
+
+    track.notes.forEach(note => {
+      const nx0 = scrollOffset === undefined ? note.start : note.start;
+      const nx1 = note.start + note.dur;
+
+      // Convert to screen x
+      const px0 = scoreLeft + ((nx0 - scrollOffset) / visibleRange) * scoreW;
+      const px1 = scoreLeft + ((nx1 - scrollOffset) / visibleRange) * scoreW;
+
+      if (px1 < scoreLeft || px0 > scoreRight) return;
+
+      const cpx0 = Math.max(scoreLeft, px0);
+      const cpx1 = Math.min(scoreRight, px1);
+      const noteW = cpx1 - cpx0;
+      if (noteW < 0.5) return;
+
+      const alpha = note.intensity * ghostOpacity;
+      const isActive = playPos >= note.start && playPos < (note.start + note.dur);
+
+      // Note body
+      if (isActive) {
+        // Active glow
+        const grd = ctx.createLinearGradient(cpx0, yTop, cpx1, yTop + noteH);
+        grd.addColorStop(0, `rgba(${r},${g},${b},${alpha * 1.4})`);
+        grd.addColorStop(1, `rgba(${r},${g},${b},${alpha * 0.7})`);
+        ctx.fillStyle = grd;
+        // Outer glow
+        ctx.shadowColor = `rgb(${r},${g},${b})`;
+        ctx.shadowBlur = 12;
+      } else {
+        ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.5})`;
+        ctx.shadowBlur = 0;
+      }
+
+      const radius = 2;
+      ctx.beginPath();
+      ctx.roundRect(cpx0, yTop, noteW, noteH, radius);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Note border
+      ctx.strokeStyle = `rgba(${r},${g},${b},${isActive ? alpha : alpha * 0.35})`;
+      ctx.lineWidth = isActive ? 1 : 0.5;
+      ctx.beginPath();
+      ctx.roundRect(cpx0, yTop, noteW, noteH, radius);
+      ctx.stroke();
+
+      // Note label
+      if (note.label && noteW > 40) {
+        ctx.fillStyle = `rgba(${r},${g},${b},${isActive ? 0.9 : 0.45})`;
+        ctx.font = `${isActive ? 'italic ' : ''}9px Courier New`;
+        ctx.fillText(note.label, cpx0 + 5, yTop + noteH * 0.62);
+      }
+    });
+  });
+
+  // Playhead
+  const phX = scoreLeft + ((playPos - scrollOffset) / visibleRange) * scoreW;
+  if (phX >= scoreLeft && phX <= scoreRight) {
+    // Glow
+    const phGrad = ctx.createLinearGradient(phX - 8, 0, phX + 8, 0);
+    phGrad.addColorStop(0, 'transparent');
+    phGrad.addColorStop(0.5, 'rgba(255,255,255,0.18)');
+    phGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = phGrad;
+    ctx.fillRect(phX - 8, scoreTop, 16, scoreH);
+
+    ctx.beginPath();
+    ctx.moveTo(phX, scoreTop - 4);
+    ctx.lineTo(phX, scoreBottom + 4);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Playhead diamond
+    ctx.beginPath();
+    ctx.moveTo(phX, scoreTop - 8);
+    ctx.lineTo(phX + 4, scoreTop - 2);
+    ctx.lineTo(phX, scoreTop + 2);
+    ctx.lineTo(phX - 4, scoreTop - 2);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fill();
+  }
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

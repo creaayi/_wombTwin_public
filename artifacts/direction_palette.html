@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Courier+Prime&display=swap');
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: #08080f;
+  color: rgba(255,255,255,0.7);
+  font-family: 'Courier Prime', monospace;
+  min-height: 100vh;
+  padding: 48px 40px 80px;
+  overflow-x: hidden;
+}
+
+h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 300;
+  font-style: italic;
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  color: rgba(255,255,255,0.2);
+  text-transform: uppercase;
+  margin-bottom: 56px;
+}
+
+.axes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin-bottom: 64px;
+}
+
+.axis-label {
+  font-size: 8px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.12);
+  padding: 6px 0;
+}
+
+/* DIRECTION CARDS */
+.section-title {
+  font-size: 8px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.12);
+  margin-bottom: 24px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.directions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 56px;
+}
+
+.card {
+  border: 1px solid rgba(255,255,255,0.07);
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.35s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.card:hover {
+  border-color: rgba(255,255,255,0.18);
+  transform: translateY(-2px);
+}
+
+.card.selected {
+  border-color: var(--accent);
+}
+
+.card-preview {
+  height: 90px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-number {
+  font-size: 8px;
+  letter-spacing: 0.3em;
+  color: rgba(255,255,255,0.15);
+  margin-bottom: 6px;
+}
+
+.card-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 15px;
+  font-weight: 300;
+  font-style: italic;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.card-desc {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: rgba(255,255,255,0.3);
+  line-height: 1.7;
+}
+
+.card-tag {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 7.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border: 1px solid;
+  opacity: 0.6;
+}
+
+/* DIMENSION SECTION */
+.dimensions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 56px;
+}
+
+.dim-card {
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 18px 20px;
+}
+
+.dim-title {
+  font-size: 8px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.25);
+  margin-bottom: 12px;
+}
+
+.dim-axis {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+
+.dim-pole {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.2);
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.dim-pole.right {
+  text-align: right;
+}
+
+.dim-track {
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  position: relative;
+}
+
+.dim-marker {
+  position: absolute;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+
+/* MINI PREVIEWS — canvas-drawn in JS */
+canvas.preview { width: 100%; height: 100%; }
+
+/* TENSION MAP */
+.tension-map {
+  width: 100%;
+  height: 220px;
+  border: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+  margin-bottom: 56px;
+}
+
+.tension-map canvas { width: 100%; height: 100%; }
+
+.map-label {
+  position: absolute;
+  font-size: 8px;
+  letter-spacing: 0.15em;
+  color: rgba(255,255,255,0.15);
+  text-transform: uppercase;
+}
+
+/* COMBINATION ROW */
+.combo-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.combo-card {
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.combo-card:hover { border-color: rgba(255,255,255,0.2); }
+
+.combo-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 6px;
+}
+
+.combo-parts {
+  font-size: 7.5px;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.2);
+  line-height: 1.8;
+}
+
+.combo-preview {
+  height: 36px;
+  margin-bottom: 10px;
+  position: relative;
+}
+</style>
+</head>
+<body>
+
+<h1>wombTwin — palette of directions</h1>
+
+<!-- DIRECTION CARDS -->
+<div class="section-title">01 — What determines the tiles</div>
+<div class="directions-grid">
+
+  <!-- A: Testimony-driven -->
+  <div class="card" style="--accent: rgba(180,140,110,0.6)">
+    <div class="card-preview">
+      <canvas id="prev-A"></canvas>
+    </div>
+    <div class="card-number">A</div>
+    <div class="card-title">Testimony-driven proportions</div>
+    <div class="card-desc">Tile width = time spent on each emotional state in the testimony. Euphoria is short. Grief is long. The proportions come from a real human account, not invention.</div>
+    <div class="card-tag" style="color: rgba(180,140,110,0.8); border-color: rgba(180,140,110,0.3)">source: testimony</div>
+  </div>
+
+  <!-- B: Aikāne timestamps -->
+  <div class="card" style="--accent: rgba(110,150,190,0.6)">
+    <div class="card-preview">
+      <canvas id="prev-B"></canvas>
+    </div>
+    <div class="card-number">B</div>
+    <div class="card-title">Aikāne timestamp proportions</div>
+    <div class="card-desc">Real timecodes from your analysis (4:28, 11:17, 12:16, 12:50...) become the grid. The reference film's own rhythm becomes the scaffolding.</div>
+    <div class="card-tag" style="color: rgba(110,150,190,0.8); border-color: rgba(110,150,190,0.3)">source: aikāne</div>
+  </div>
+
+  <!-- C: You drag them -->
+  <div class="card" style="--accent: rgba(140,190,150,0.6)">
+    <div class="card-preview">
+      <canvas id="prev-C"></canvas>
+    </div>
+    <div class="card-number">C</div>
+    <div class="card-title">You sculpt them by feel</div>
+    <div class="card-desc">Tiles are draggable. You resize until the rhythm feels true. What you produce becomes the actual brief. The tool is a composition instrument, not a presentation.</div>
+    <div class="card-tag" style="color: rgba(140,190,150,0.8); border-color: rgba(140,190,150,0.3)">source: your hand</div>
+  </div>
+
+  <!-- D: Music-locked -->
+  <div class="card" style="--accent: rgba(190,160,210,0.6)">
+    <div class="card-preview">
+      <canvas id="prev-D"></canvas>
+    </div>
+    <div class="card-number">D</div>
+    <div class="card-title">Music-locked grid</div>
+    <div class="card-desc">The grid snaps to bars and phrases. The composer sets the tempo and the tiles align to it. The film's architecture becomes literally musical from the start.</div>
+    <div class="card-tag" style="color: rgba(190,160,210,0.8); border-color: rgba(190,160,210,0.3)">source: composer</div>
+  </div>
+
+  <!-- E: Symptom-weighted -->
+  <div class="card" style="--accent: rgba(190,110,110,0.6)">
+    <div class="card-preview">
+      <canvas id="prev-E"></canvas>
+    </div>
+    <div class="card-number">E</div>
+    <div class="card-title">Symptom-weighted density</div>
+    <div class="card-desc">Tile height varies per register. Grief gets more vertical space because it was always larger than it appeared. The twin track starts thin and grows. Proportion as diagnosis.</div>
+    <div class="card-tag" style="color: rgba(190,110,110,0.8); border-color: rgba(190,110,110,0.3)">source: the wound</div>
+  </div>
+
+  <!-- F: Hybrid -->
+  <div class="card" style="--accent: rgba(200,185,140,0.6)">
+    <div class="card-preview">
+      <canvas id="prev-F"></canvas>
+    </div>
+    <div class="card-number">F</div>
+    <div class="card-title">Hybrid — testimony × your hand</div>
+    <div class="card-desc">Start from testimony proportions. Then you adjust. The real account is the skeleton; your feelingmagining is the flesh. Two authors, one score.</div>
+    <div class="card-tag" style="color: rgba(200,185,140,0.8); border-color: rgba(200,185,140,0.3)">source: both</div>
+  </div>
+
+</div>
+
+<!-- DIMENSION AXES -->
+<div class="section-title">02 — What you can push on each axis</div>
+<div class="dimensions-grid">
+
+  <div class="dim-card">
+    <div class="dim-title">Visual texture</div>
+    <div class="dim-axis">
+      <div class="dim-pole">hard edges<br>sharp tiles</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:25%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">soft edges<br>bleeding light</div>
+    </div>
+    <div class="dim-axis">
+      <div class="dim-pole">flat color<br>solid fill</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:60%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">gradient<br>inner glow</div>
+    </div>
+    <div class="dim-axis">
+      <div class="dim-pole">opaque<br>present</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:70%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">translucent<br>ghost layer</div>
+    </div>
+  </div>
+
+  <div class="dim-card">
+    <div class="dim-title">Time behavior</div>
+    <div class="dim-axis">
+      <div class="dim-pole">static<br>all visible</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:80%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">animated<br>playhead moves</div>
+    </div>
+    <div class="dim-axis">
+      <div class="dim-pole">scroll<br>continuous</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:45%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">zoom<br>focus window</div>
+    </div>
+    <div class="dim-axis">
+      <div class="dim-pole">linear<br>left→right</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:15%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">circular<br>breathing loop</div>
+    </div>
+  </div>
+
+  <div class="dim-card">
+    <div class="dim-title">Sound relationship</div>
+    <div class="dim-axis">
+      <div class="dim-pole">silent<br>visual only</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:55%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">your track<br>plays live</div>
+    </div>
+    <div class="dim-axis">
+      <div class="dim-pole">score<br>notation</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:35%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">waveform<br>audio shape</div>
+    </div>
+    <div class="dim-axis">
+      <div class="dim-pole">one track<br>flat</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:65%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">multi-layer<br>stems visible</div>
+    </div>
+  </div>
+
+  <div class="dim-card">
+    <div class="dim-title">Interactivity</div>
+    <div class="dim-axis">
+      <div class="dim-pole">watch<br>passive</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:70%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">compose<br>reshape tiles</div>
+    </div>
+    <div class="dim-axis">
+      <div class="dim-pole">fixed<br>authored</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:50%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">open<br>explorable</div>
+    </div>
+    <div class="dim-axis">
+      <div class="dim-pole">one version<br>one reading</div>
+      <div class="dim-track">
+        <div class="dim-marker" style="left:40%; background: rgba(255,255,255,0.4)"></div>
+      </div>
+      <div class="dim-pole right">toggle layers<br>multiple readings</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- POSSIBLE COMBINATIONS -->
+<div class="section-title">03 — Possible combinations to pursue</div>
+<div class="combo-row">
+
+  <div class="combo-card">
+    <div class="combo-preview"><canvas id="combo-1"></canvas></div>
+    <div class="combo-title">The Lighted Building</div>
+    <div class="combo-parts">
+      B (aikāne grid)<br>
+      soft inner glow<br>
+      variable tile height<br>
+      your track plays live
+    </div>
+  </div>
+
+  <div class="combo-card">
+    <div class="combo-preview"><canvas id="combo-2"></canvas></div>
+    <div class="combo-title">The Negative Strip</div>
+    <div class="combo-parts">
+      A (testimony time)<br>
+      hard edges, ghosted<br>
+      static, all visible<br>
+      interference overlay
+    </div>
+  </div>
+
+  <div class="combo-card">
+    <div class="combo-preview"><canvas id="combo-3"></canvas></div>
+    <div class="combo-title">The Composition Tool</div>
+    <div class="combo-parts">
+      C (your hand)<br>
+      draggable tiles<br>
+      music-locked snap<br>
+      exportable brief
+    </div>
+  </div>
+
+  <div class="combo-card">
+    <div class="combo-preview"><canvas id="combo-4"></canvas></div>
+    <div class="combo-title">The Living Score</div>
+    <div class="combo-parts">
+      F (hybrid)<br>
+      breathing animation<br>
+      waveform visible<br>
+      toggle: aikāne layer
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Mini preview renderers
+function drawTestimonyPreview(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2,2); const W = w/2, H = h/2;
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0,0,W,H);
+  // Testimony-proportioned tiles: short euphoria, long grief
+  const segments = [
+    { w: 0.15, color: [180,140,110], label: 'search' },
+    { w: 0.08, color: [140,190,150], label: 'reunion' },
+    { w: 0.28, color: [190,110,110], label: 'grief' },
+    { w: 0.12, color: [140,190,150], label: 'euphoria' },
+    { w: 0.22, color: [160,155,175], label: 'integration' },
+    { w: 0.15, color: [200,185,140], label: 'ritual' },
+  ];
+  const tracks = 5;
+  const pad = 3;
+  let x = pad;
+  const totalW = W - pad*2;
+  segments.forEach(seg => {
+    const sw = seg.w * totalW;
+    for (let t = 0; t < tracks; t++) {
+      const th = (H - pad*(tracks+1)) / tracks;
+      const ty = pad + t*(th+pad);
+      const alpha = 0.2 + Math.random()*0.4;
+      ctx.fillStyle = `rgba(${seg.color[0]},${seg.color[1]},${seg.color[2]},${alpha})`;
+      ctx.fillRect(x+1, ty, sw-2, th);
+    }
+    x += sw;
+  });
+}
+
+function drawAikanePreview(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2,2); const W = w/2, H = h/2;
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0,0,W,H);
+  // Aikāne timecodes: 4:28, 11:17, 12:00, 12:16, 12:45, 12:50 out of ~13min
+  const total = 13*60;
+  const marks = [0, 4*60+28, 11*60+17, 12*60, 12*60+16, 12*60+45, 12*60+50, total];
+  const colors = [[160,155,175],[110,150,190],[140,190,150],[140,190,150],[140,190,150],[200,185,140],[200,185,140]];
+  const tracks = 4; const pad = 3;
+  for (let i = 0; i < marks.length-1; i++) {
+    const x0 = pad + (marks[i]/total)*(W-pad*2);
+    const x1 = pad + (marks[i+1]/total)*(W-pad*2);
+    const c = colors[i] || [160,160,160];
+    for (let t = 0; t < tracks; t++) {
+      const th = (H - pad*(tracks+1)) / tracks;
+      const ty = pad + t*(th+pad);
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.35)`;
+      ctx.fillRect(x0+1, ty, x1-x0-2, th);
+    }
+  }
+  // Playhead
+  const phx = pad + (12*60+16)/total*(W-pad*2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(phx,0); ctx.lineTo(phx,H); ctx.stroke();
+}
+
+function drawDragPreview(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2,2); const W = w/2, H = h/2;
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0,0,W,H);
+  const tiles = [
+    {x:3,w:28,c:[180,140,110]},{x:33,w:14,c:[110,150,190]},
+    {x:49,w:22,c:[140,190,150]},{x:73,w:38,c:[190,110,110]},
+    {x:113,w:26,c:[200,185,140]}
+  ];
+  const tracks = 4; const pad = 3;
+  tiles.forEach(tile => {
+    for (let t = 0; t < tracks; t++) {
+      const th = (H - pad*(tracks+1)) / tracks;
+      const ty = pad + t*(th+pad);
+      ctx.fillStyle = `rgba(${tile.c[0]},${tile.c[1]},${tile.c[2]},0.3)`;
+      ctx.fillRect(tile.x, ty, tile.w, th);
+      ctx.strokeStyle = `rgba(${tile.c[0]},${tile.c[1]},${tile.c[2]},0.5)`;
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(tile.x, ty, tile.w, th);
+    }
+    // drag handle
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(tile.x+tile.w-2, pad, 1, H-pad*2);
+  });
+}
+
+function drawMusicPreview(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2,2); const W = w/2, H = h/2;
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0,0,W,H);
+  const bars = 16; const barW = (W-6) / bars;
+  for (let b = 0; b < bars; b++) {
+    const x = 3 + b * barW;
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    if (b%4===0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    }
+  }
+  // Notes snapped to bars
+  const notes = [
+    {b:0,dur:4,t:0,c:[180,140,110]},{b:4,dur:2,t:1,c:[110,150,190]},
+    {b:4,dur:8,t:0,c:[140,190,150]},{b:6,dur:6,t:2,c:[190,110,110]},
+    {b:8,dur:4,t:3,c:[190,160,210]},{b:12,dur:4,t:0,c:[200,185,140]},
+  ];
+  const tracks=4; const pad=3;
+  notes.forEach(n => {
+    const th = (H-pad*(tracks+1))/tracks;
+    const ty = pad + n.t*(th+pad);
+    const x = 3 + n.b*barW; const nw = n.dur*barW;
+    ctx.fillStyle = `rgba(${n.c[0]},${n.c[1]},${n.c[2]},0.4)`;
+    ctx.fillRect(x+1, ty, nw-2, th);
+  });
+}
+
+function drawSymptomPreview(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2,2); const W = w/2, H = h/2;
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0,0,W,H);
+  // Variable height tracks
+  const tracks = [
+    {name:'grief',h:0.35,c:[190,110,110]},
+    {name:'body',h:0.22,c:[180,140,110]},
+    {name:'twin',h:0.18,c:[140,190,150]},
+    {name:'memory',h:0.15,c:[110,150,190]},
+    {name:'light',h:0.10,c:[200,185,140]},
+  ];
+  let y = 2;
+  tracks.forEach(tr => {
+    const th = tr.h * (H-4);
+    // tiles
+    const numTiles = 4 + Math.floor(Math.random()*3);
+    let x = 2;
+    for (let i=0; i<numTiles; i++) {
+      const tw = (W-4)/numTiles * (0.6+Math.random()*0.4);
+      ctx.fillStyle = `rgba(${tr.c[0]},${tr.c[1]},${tr.c[2]},0.35)`;
+      ctx.fillRect(x, y, tw-2, th-1);
+      x += (W-4)/numTiles;
+    }
+    y += th;
+  });
+}
+
+function drawHybridPreview(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2,2); const W = w/2, H = h/2;
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0,0,W,H);
+  // Ghost layer (testimony) + adjusted layer
+  const base = [{w:0.15},{w:0.08},{w:0.28},{w:0.12},{w:0.22},{w:0.15}];
+  const colors = [[180,140,110],[140,190,150],[190,110,110],[140,190,150],[160,155,175],[200,185,140]];
+  const tracks=4; const pad=2;
+  let x=pad; const tw=W-pad*2;
+  base.forEach((seg,i) => {
+    const sw=seg.w*tw; const c=colors[i];
+    for(let t=0;t<tracks;t++){
+      const th=(H-pad*(tracks+1))/tracks;
+      const ty=pad+t*(th+pad);
+      // Ghost
+      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},0.12)`;
+      ctx.fillRect(x,ty,sw-1,th);
+      // Adjusted (slightly different width)
+      const adj = sw*(0.8+Math.random()*0.4);
+      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},0.35)`;
+      ctx.fillRect(x,ty,adj-1,th);
+    }
+    x+=sw;
+  });
+}
+
+// Combo previews
+function drawCombo(canvas, type) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2,2); const W = w/2, H = h/2;
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0,0,W,H);
+
+  if (type===1) {
+    // Lighted building: windows with glow, variable height
+    const cols=8; const rows=4;
+    const cw=(W-6)/cols; const ch=(H-6)/rows;
+    const colors=[[190,110,110],[110,150,190],[140,190,150],[200,185,140],[180,140,110],[160,155,175]];
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+      const x=3+c*cw; const y=3+r*ch;
+      const ci=(r+c)%colors.length; const col=colors[ci];
+      const lit=Math.random()>0.3;
+      if(lit){
+        const grd=ctx.createRadialGradient(x+cw/2,y+ch/2,0,x+cw/2,y+ch/2,cw*0.8);
+        grd.addColorStop(0,`rgba(${col[0]},${col[1]},${col[2]},0.6)`);
+        grd.addColorStop(1,`rgba(${col[0]},${col[1]},${col[2]},0.05)`);
+        ctx.fillStyle=grd;
+      } else {
+        ctx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},0.07)`;
+      }
+      ctx.fillRect(x+1,y+1,cw-2,ch-2);
+    }
+  } else if(type===2) {
+    // Negative strip: all visible, ghosted
+    const strips=5; const sh=(H-4)/strips;
+    const colors=[[180,140,110],[110,150,190],[140,190,150],[190,110,110],[200,185,140]];
+    for(let s=0;s<strips;s++){
+      const y=2+s*(sh+1);
+      const segs=6+s; const sw=(W-4)/segs;
+      for(let i=0;i<segs;i++){
+        const alpha=0.08+Math.random()*0.25;
+        const c=colors[s];
+        ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+        ctx.fillRect(2+i*sw+0.5, y, sw-1, sh-1);
+        ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},0.2)`;
+        ctx.lineWidth=0.3;
+        ctx.strokeRect(2+i*sw+0.5, y, sw-1, sh-1);
+      }
+    }
+  } else if(type===3) {
+    // Composition tool: draggable tiles
+    const tiles=[{x:2,w:18,c:[180,140,110]},{x:21,w:10,c:[110,150,190]},{x:32,w:24,c:[140,190,150]},{x:57,w:32,c:[190,110,110]},{x:90,w:20,c:[200,185,140]}];
+    const tracks=3;const pad=2;
+    tiles.forEach(tile=>{
+      for(let t=0;t<tracks;t++){
+        const th=(H-pad*(tracks+1))/tracks;
+        const ty=pad+t*(th+pad);
+        ctx.fillStyle=`rgba(${tile.c[0]},${tile.c[1]},${tile.c[2]},0.3)`;
+        ctx.fillRect(tile.x,ty,tile.w,th);
+        ctx.strokeStyle=`rgba(${tile.c[0]},${tile.c[1]},${tile.c[2]},0.5)`;
+        ctx.lineWidth=0.4; ctx.strokeRect(tile.x,ty,tile.w,th);
+      }
+      ctx.fillStyle='rgba(255,255,255,0.25)';
+      ctx.fillRect(tile.x+tile.w-1.5,pad,1,H-pad*2);
+    });
+  } else if(type===4) {
+    // Living score: breathing, waveform overlay
+    const tracks=4; const pad=2;
+    const colors=[[180,140,110],[140,190,150],[190,110,110],[200,185,140]];
+    for(let t=0;t<tracks;t++){
+      const th=(H-pad*(tracks+1))/tracks;
+      const ty=pad+t*(th+pad);
+      const c=colors[t];
+      const segs=5;
+      for(let s=0;s<segs;s++){
+        const sw=(W-4)/segs;
+        const alpha=0.1+Math.random()*0.4;
+        ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+        ctx.fillRect(2+s*sw,ty,sw-1,th);
+      }
+    }
+    // waveform overlay
+    ctx.beginPath();
+    for(let x=0;x<W;x++){
+      const y=H/2+Math.sin(x/W*Math.PI*8)*8+Math.sin(x/W*Math.PI*3)*4;
+      x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle='rgba(255,255,255,0.15)';
+    ctx.lineWidth=0.5; ctx.stroke();
+  }
+}
+
+window.addEventListener('load', () => {
+  drawTestimonyPreview(document.getElementById('prev-A'));
+  drawAikanePreview(document.getElementById('prev-B'));
+  drawDragPreview(document.getElementById('prev-C'));
+  drawMusicPreview(document.getElementById('prev-D'));
+  drawSymptomPreview(document.getElementById('prev-E'));
+  drawHybridPreview(document.getElementById('prev-F'));
+  drawCombo(document.getElementById('combo-1'),1);
+  drawCombo(document.getElementById('combo-2'),2);
+  drawCombo(document.getElementById('combo-3'),3);
+  drawCombo(document.getElementById('combo-4'),4);
+});
+</script>
+</body>
+</html>
