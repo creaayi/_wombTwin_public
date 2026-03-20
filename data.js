@@ -25,7 +25,7 @@ const PROJECT = {
   labels: {
     heroLabel:      { en: 'project hub', fr: 'hub du projet' },
     beatsSection:   { en: 'Emotional Architecture', fr: 'Architecture Émotionnelle' },
-    playFullArc:    { en: 'Play full arc — listen to all beats in sequence', fr: 'Écouter l\'arc complet — tous les beats en séquence' },
+    playFullArc:    { en: 'Play the being-built soundtrack — listen to all beats in sequence', fr: 'Écouter la bande son en cours d\' élaboration du film — tous les sons en séquence' },
     registers:      { en: 'Six Emotional Registers', fr: 'Six Registres Émotionnels' },
     artifacts:      { en: 'Interactive Artifacts', fr: 'Artefacts Interactifs' },
     artifactsDesc:  {
