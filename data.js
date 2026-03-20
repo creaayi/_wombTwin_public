@@ -76,7 +76,7 @@ const PROJECT = {
         {
           file: 'audio/track_mundus_paul.mp3',
           title: 'track_mundus_paul',
-          source: { en: 'Paul (composer) · tempo matches envisioned rhythm', fr: 'Paul (compositeur) · le tempo correspond au rythme envisagé' },
+          source: { en: 'Tempo matches envisioned rhythm', fr: 'Le tempo correspond au rythme imaginé pour ce beat' },
           startAt: 0,
           note: {
             en: 'The image: a piece of something hitting a surface, accumulating, and due to acceleration, breaking through it — like water drops on glass during rain. Hence the link with "Access."',
