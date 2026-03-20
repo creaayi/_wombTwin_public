@@ -245,7 +245,6 @@ const PROJECT = {
   questions: [
     { en: 'Will the final film <em>be</em> the piano roll, or will the piano roll be a tool that generates a different visual language?', fr: 'Le film final <em>sera-t-il</em> le piano roll, ou le piano roll sera-t-il un outil qui génère un langage visuel différent ?' },
     { en: 'Is the interference pattern a metaphor for the entire film, or just a moment?', fr: 'Le motif d\'interférence est-il une métaphore pour tout le film, ou juste un moment ?' },
-    { en: 'Can the opening "before" be beautiful without being sad?', fr: 'L\'ouverture « avant » peut-elle être belle sans être triste ?' },
     { en: 'What does the twin look like visually, if never shown as a fetus or face?', fr: 'À quoi ressemble le jumeau visuellement, s\'il n\'est jamais montré comme fœtus ou visage ?' },
     { en: 'Does the film end with the man alone, or is there another presence?', fr: 'Le film se termine-t-il avec l\'homme seul, ou y a-t-il une autre présence ?' },
   ],
